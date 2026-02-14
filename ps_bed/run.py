@@ -96,6 +96,9 @@ def run_pick_place(config: Config, logger: Logger):
     env_cfg = config.env
     env_cfg.control_mode = "pd_joint_pos"
     env_cfg.num_envs = 1
+    # StackNCube-v1 only supports sparse/none reward modes
+    if "StackNCube" in env_cfg.env_id:
+        env_cfg.reward_mode = "sparse"
 
     env = make_single_env(env_cfg)
     skill = PickPlaceSkill()
@@ -151,6 +154,71 @@ def run_pick_place(config: Config, logger: Logger):
     return all_returns, all_lengths, all_successes
 
 
+def run_stack_n(config: Config, logger: Logger):
+    """Run episodes with the StackNSkill N-cube stacking planner."""
+    from ps_bed.skills.stack_n import StackNSkill
+
+    # Override settings required by the motion planner
+    env_cfg = config.env
+    env_cfg.control_mode = "pd_joint_pos"
+    env_cfg.num_envs = 1
+    env_cfg.reward_mode = "sparse"  # StackNCube-v1 only supports sparse/none
+    env_cfg.max_episode_steps = 250  # StackNCube-v1 needs more steps for N-cube stacking
+
+    # Auto-switch env_id to StackNCube-v1 if still using default StackCube-v1
+    if env_cfg.env_id == "StackCube-v1":
+        env_cfg.env_id = "StackNCube-v1"
+        print("Note: auto-switching env_id to StackNCube-v1 for stack_n policy")
+
+    env = make_single_env(env_cfg)
+    skill = StackNSkill()
+    target_episodes = config.run.num_episodes
+    num_cubes = env_cfg.num_cubes
+
+    all_returns = []
+    all_lengths = []
+    all_successes = []
+
+    recording = config.env.record_video
+
+    for ep in range(1, target_episodes + 1):
+        res = skill.solve(env, seed=config.seed + ep)
+
+        # res is the last (obs, reward, terminated, truncated, info) from the planner
+        obs, reward, terminated, truncated, info = res
+
+        success = False
+        if "success" in info:
+            s = info["success"]
+            if isinstance(s, torch.Tensor):
+                success = bool(s.item())
+            else:
+                success = bool(s)
+
+        cubes_stacked = info.get("cubes_stacked", "?")
+        failure_reason = info.get("failure_reason", "")
+
+        # Manually flush video since save_on_reset=False
+        if recording:
+            env.flush_video()
+
+        all_returns.append(0.0)  # planner doesn't accumulate reward
+        all_lengths.append(0)
+        all_successes.append(success)
+
+        logger.log_episode(
+            {"episode/return": 0.0, "episode/length": 0, "episode/success": int(success)},
+            step=ep,
+        )
+
+        rate = np.mean(all_successes)
+        failure_tag = f"  reason={failure_reason}" if failure_reason else ""
+        print(f"[Episode {ep}/{target_episodes}]  success={success}  cubes_stacked={cubes_stacked}/{num_cubes-1}  cumulative_rate={rate:.2f}{failure_tag}")
+
+    env.close()
+    return all_returns, all_lengths, all_successes
+
+
 @hydra.main(version_base="1.3", config_path="../configs", config_name="default")
 def main(cfg: Config) -> None:
     cfg = OmegaConf.to_object(cfg)
@@ -171,8 +239,10 @@ def main(cfg: Config) -> None:
         all_returns, all_lengths, all_successes = run_random(config, logger)
     elif policy == "pick_place":
         all_returns, all_lengths, all_successes = run_pick_place(config, logger)
+    elif policy == "stack_n":
+        all_returns, all_lengths, all_successes = run_stack_n(config, logger)
     else:
-        raise ValueError(f"Unknown policy: {policy!r}. Choose 'random' or 'pick_place'.")
+        raise ValueError(f"Unknown policy: {policy!r}. Choose 'random', 'pick_place', or 'stack_n'.")
 
     # Summary
     summary = {
