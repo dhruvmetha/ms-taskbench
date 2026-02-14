@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** Reliably execute multi-step pick-place sequences on configurable N-cube environments and produce video demos
-**Current focus:** Phase 2 - Sequential Stacking Skill
+**Current focus:** Phase 3 - Config and Recording Integration
 
 ## Current Position
 
-Phase: 2 of 3 (Sequential Stacking Skill)
+Phase: 3 of 3 (Config and Recording Integration)
 Plan: 1 of 1 in current phase
-Status: Phase 2 complete
-Last activity: 2026-02-14 -- Completed 02-01-PLAN.md (StackNSkill sequential N-cube stacking)
+Status: Phase 3 complete
+Last activity: 2026-02-14 -- Completed 03-01-PLAN.md (Config and recording integration)
 
-Progress: [████████████████████] 100% (Phase 2)
+Progress: [████████████████████] 100% (Phase 3 - All phases complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 4 min
-- Total execution time: 0.13 hours
+- Total plans completed: 3
+- Average duration: 3.3 min
+- Total execution time: 0.17 hours
 
 **By Phase:**
 
@@ -29,10 +29,11 @@ Progress: [████████████████████] 100% (P
 |-------|-------|-------|----------|
 | 01-n-cube-environment | 1 | 5 min | 5 min |
 | 02-sequential-stacking-skill | 1 | 3 min | 3 min |
+| 03-config-and-recording-integration | 1 | 2 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (5 min), 02-01 (3 min)
-- Trend: improving (2 min faster)
+- Last 5 plans: 01-01 (5 min), 02-01 (3 min), 03-01 (2 min)
+- Trend: improving (accelerating)
 
 *Updated after each plan completion*
 
@@ -57,6 +58,9 @@ Recent decisions affecting current work:
 - 02-01: Settling steps: 10 no-op gripper actions after release
 - 02-01: Grasp verification via agent.is_grasping(), abort on failure
 - 02-01: Info dict structure: cubes_stacked always present, failure_reason only on skill failures
+- 03-01: Conditional num_cubes forwarding prevents passing unexpected kwargs to StackCube-v1
+- 03-01: Auto env_id switching from StackCube-v1 to StackNCube-v1 when policy=stack_n
+- 03-01: max_episode_steps=250 default for stack_n policy to accommodate N-cube sequences
 
 ### Pending Todos
 
@@ -70,5 +74,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 02-01-PLAN.md (StackNSkill sequential N-cube stacking)
+Stopped at: Completed 03-01-PLAN.md (Config and recording integration) - ALL PHASES COMPLETE
 Resume file: None
