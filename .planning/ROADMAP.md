@@ -41,11 +41,10 @@ Plans:
   2. Each successive cube is placed on top of the current stack (not at a fixed height), correctly computing the dynamic stack-top position
   3. If a grasp fails or a place fails, the episode terminates immediately with a clear failure indication rather than continuing with a corrupt state
   4. The existing 2-cube PickPlaceSkill still works on StackCube-v1 after primitives are refactored (backward compatibility)
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md -- Implement StackNSkill with sequential stacking loop, verify N=3 and backward compatibility
 
 ### Phase 3: Config and Recording Integration
 **Goal**: User can run N-cube stacking from the command line with a single Hydra command and get a video of the result
@@ -68,5 +67,5 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. N-Cube Environment | 1/1 | ✓ Complete | 2026-02-14 |
-| 2. Sequential Stacking Skill | 0/TBD | Not started | - |
+| 2. Sequential Stacking Skill | 0/1 | Not started | - |
 | 3. Config and Recording Integration | 0/TBD | Not started | - |
