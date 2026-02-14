@@ -57,22 +57,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ENV-01 | — | Pending |
-| ENV-02 | — | Pending |
-| ENV-03 | — | Pending |
-| ENV-04 | — | Pending |
-| SKIL-01 | — | Pending |
-| SKIL-02 | — | Pending |
-| SKIL-03 | — | Pending |
-| INTG-01 | — | Pending |
-| INTG-02 | — | Pending |
-| INTG-03 | — | Pending |
+| ENV-01 | Phase 1: N-Cube Environment | Pending |
+| ENV-02 | Phase 1: N-Cube Environment | Pending |
+| ENV-03 | Phase 1: N-Cube Environment | Pending |
+| ENV-04 | Phase 1: N-Cube Environment | Pending |
+| SKIL-01 | Phase 2: Sequential Stacking Skill | Pending |
+| SKIL-02 | Phase 2: Sequential Stacking Skill | Pending |
+| SKIL-03 | Phase 2: Sequential Stacking Skill | Pending |
+| INTG-01 | Phase 3: Config and Recording Integration | Pending |
+| INTG-02 | Phase 3: Config and Recording Integration | Pending |
+| INTG-03 | Phase 3: Config and Recording Integration | Pending |
 
 **Coverage:**
 - v1 requirements: 10 total
-- Mapped to phases: 0
-- Unmapped: 10
+- Mapped to phases: 10
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-13*
-*Last updated: 2026-02-13 after initial definition*
+*Last updated: 2026-02-13 after roadmap creation*
