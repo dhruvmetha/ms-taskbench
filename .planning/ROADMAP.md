@@ -13,7 +13,7 @@ This roadmap delivers configurable N-cube sequential stacking on ManiSkill3. Pha
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: N-Cube Environment** - Parameterized StackNCube-v1 env with N cubes, collision-free spawn, success evaluation, and scaled step budget
-- [ ] **Phase 2: Sequential Stacking Skill** - Extract grasp primitives and compose N-1 pick-place loop with dynamic targeting and abort semantics
+- [x] **Phase 2: Sequential Stacking Skill** - Extract grasp primitives and compose N-1 pick-place loop with dynamic targeting and abort semantics
 - [ ] **Phase 3: Config and Recording Integration** - Hydra wiring, run.py dispatch, and video capture of full stacking sequences
 
 ## Phase Details
@@ -44,7 +44,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 02-01-PLAN.md -- Implement StackNSkill with sequential stacking loop, verify N=3 and backward compatibility
+- [x] 02-01-PLAN.md -- Implement StackNSkill with sequential stacking loop, verify N=3 and backward compatibility
 
 ### Phase 3: Config and Recording Integration
 **Goal**: User can run N-cube stacking from the command line with a single Hydra command and get a video of the result
@@ -67,5 +67,5 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. N-Cube Environment | 1/1 | ✓ Complete | 2026-02-14 |
-| 2. Sequential Stacking Skill | 0/1 | Not started | - |
+| 2. Sequential Stacking Skill | 1/1 | ✓ Complete | 2026-02-14 |
 | 3. Config and Recording Integration | 0/TBD | Not started | - |
