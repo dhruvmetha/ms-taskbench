@@ -54,10 +54,10 @@ Plans:
   1. `python -m ps_bed.run env.num_cubes=5 run.policy=stack_n` runs a 5-cube stacking episode end to end without manual setup
   2. `env.record_video=true` produces a video file showing the complete multi-cube stacking sequence from start to finish
   3. Default config values work sensibly (e.g., num_cubes defaults to 3 or similar, policy dispatches correctly)
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 03-01: TBD
+- [ ] 03-01-PLAN.md -- Add num_cubes to Hydra config, run_stack_n() dispatch, and video recording integration
 
 ## Progress
 
@@ -68,4 +68,4 @@ Phases execute in numeric order: 1 -> 2 -> 3
 |-------|----------------|--------|-----------|
 | 1. N-Cube Environment | 1/1 | ✓ Complete | 2026-02-14 |
 | 2. Sequential Stacking Skill | 1/1 | ✓ Complete | 2026-02-14 |
-| 3. Config and Recording Integration | 0/TBD | Not started | - |
+| 3. Config and Recording Integration | 0/1 | Not started | - |
