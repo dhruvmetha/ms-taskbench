@@ -27,11 +27,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Cubes spawn at random positions each reset without overlapping each other or falling off the table
   3. `env.evaluate()` returns success=True only when all N cubes form a single stack (all N-1 adjacent pairs stacked, static, and released)
   4. Episodes allow enough steps for a planner to complete N-1 pick-place operations without premature truncation
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
+- [ ] 01-01-PLAN.md -- Implement StackNCubeEnv (BaseEnv), register as StackNCube-v1, verify all ENV requirements
 
 ### Phase 2: Sequential Stacking Skill
 **Goal**: A skill can pick up cubes one by one and stack all N cubes into a tower, aborting cleanly if any step fails
@@ -68,6 +67,6 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. N-Cube Environment | 0/TBD | Not started | - |
+| 1. N-Cube Environment | 0/1 | Planned | - |
 | 2. Sequential Stacking Skill | 0/TBD | Not started | - |
 | 3. Config and Recording Integration | 0/TBD | Not started | - |
