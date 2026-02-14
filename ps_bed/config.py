@@ -11,6 +11,7 @@ class EnvConfig:
     reward_mode: str = "normalized_dense"
     num_envs: int = 16
     max_episode_steps: int = 100
+    num_cubes: int = 3
     record_video: bool = False
     render_mode: str = "rgb_array"
 
