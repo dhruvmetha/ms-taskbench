@@ -1,0 +1,10 @@
+mani_skill
+torch
+hydra-core>=1.3
+omegaconf>=2.3
+wandb
+gymnasium
+
+[dev]
+black
+isort

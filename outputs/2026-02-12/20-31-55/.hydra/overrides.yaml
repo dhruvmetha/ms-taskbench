@@ -1,0 +1,2 @@
+- run.policy=pick_place
+- run.num_episodes=3
