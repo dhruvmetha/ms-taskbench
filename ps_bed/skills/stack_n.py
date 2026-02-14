@@ -237,7 +237,9 @@ class StackNSkill(PickPlaceSkill):
                 return obs, 0.0, False, False, info
 
         # Success: all N-1 operations completed
-        obs, reward, terminated, truncated, info = result
+        obs, reward, terminated, truncated, _ = result
+        # Get final evaluation from env
+        info = raw.evaluate()
         info["cubes_stacked"] = n - 1
 
         logger.info(f"Stacking complete: {n-1}/{n-1} cubes stacked")
