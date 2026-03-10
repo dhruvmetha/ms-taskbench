@@ -120,7 +120,7 @@ class StateRecorder:
                 arrays[key] = np.stack([f[key] for f in self.frames])
 
         arrays["num_frames"] = np.array(len(self.frames))
-        arrays["control_freq"] = np.array(20)
+        arrays["control_freq"] = np.array(self.raw.control_freq)
 
         np.savez_compressed(path, **arrays)
         logger.info("Saved %d frames to %s", len(self.frames), path)

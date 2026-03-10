@@ -121,7 +121,7 @@ class DemoRecorderSolver(BaseSolver):
         cubes = _get_cube_list(env)
 
         scene_config = {
-            "env_id": raw.spec.id if hasattr(raw, "spec") and raw.spec else "unknown",
+            "env_id": raw.spec.id,
             "num_cubes": len(cubes),
             "initial_poses": {
                 f"cube_{i}": cube.pose.p[0].cpu().numpy().tolist()
@@ -312,5 +312,5 @@ class DemoRecorderSolver(BaseSolver):
                 break
 
         info = raw.evaluate()
-        success = bool(info.get("success", False))
+        success = bool(info["success"])
         return SolverResult(success=success, info=dict(info))

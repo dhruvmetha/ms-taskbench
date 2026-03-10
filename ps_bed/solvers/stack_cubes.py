@@ -150,7 +150,7 @@ class StackCubesSolver(BaseSolver):
 
         info = raw.evaluate()
         success = bool(info["success"].item())
-        elapsed = int(info.get("elapsed_steps", 0))
+        elapsed = int(info["elapsed_steps"])
 
         if not success:
             logger.warning("Stacking complete but env reports failure")
