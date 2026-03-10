@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from typing import Any, Dict
 
 from hydra.core.config_store import ConfigStore
 
@@ -11,7 +12,7 @@ class EnvConfig:
     reward_mode: str = "normalized_dense"
     num_envs: int = 16
     max_episode_steps: int = 100
-    num_cubes: int = 3
+    extra_kwargs: Dict[str, Any] = field(default_factory=dict)
     record_video: bool = False
     render_mode: str = "rgb_array"
 
@@ -26,7 +27,7 @@ class LoggingConfig:
 @dataclass
 class RunConfig:
     num_episodes: int = 100
-    policy: str = "random"
+    solver: str = "random"
 
 
 @dataclass

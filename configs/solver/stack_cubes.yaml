@@ -1,0 +1,7 @@
+# @package _global_
+run:
+  solver: stack_cubes
+env:
+  control_mode: pd_joint_pos
+  num_envs: 1
+  reward_mode: sparse

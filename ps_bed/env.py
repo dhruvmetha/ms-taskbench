@@ -7,14 +7,6 @@ import ps_bed.envs  # noqa: F401 — register custom envs
 from ps_bed.config import EnvConfig
 
 
-def _extra_env_kwargs(cfg: EnvConfig) -> dict:
-    """Build env-specific kwargs based on env_id."""
-    kwargs = {}
-    if "StackNCube" in cfg.env_id:
-        kwargs["num_cubes"] = cfg.num_cubes
-    return kwargs
-
-
 def make_env(cfg: EnvConfig):
     """Create a ManiSkill StackCube env with optional video recording and vectorization."""
     need_render = cfg.record_video or cfg.render_mode == "human"
@@ -28,7 +20,7 @@ def make_env(cfg: EnvConfig):
         num_envs=cfg.num_envs,
         max_episode_steps=cfg.max_episode_steps,
         render_mode=render_mode,
-        **_extra_env_kwargs(cfg),
+        **cfg.extra_kwargs,
     )
 
     if cfg.record_video and cfg.render_mode != "human":
@@ -63,7 +55,7 @@ def make_single_env(cfg: EnvConfig):
         max_episode_steps=cfg.max_episode_steps,
         render_mode=render_mode,
         sim_backend="cpu",
-        **_extra_env_kwargs(cfg),
+        **cfg.extra_kwargs,
     )
 
     if cfg.record_video and cfg.render_mode != "human":
@@ -75,7 +67,6 @@ def make_single_env(cfg: EnvConfig):
             save_on_reset=False,
             record_reward=False,
             video_fps=30,
-            max_steps_per_video=cfg.max_episode_steps,
         )
 
     return env

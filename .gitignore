@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Virtual environments
+.venv/
+
+# Artifacts
+outputs/
+videos/
+videos_old/
+data/
+
+# OS
+.DS_Store
+
+# uv
+uv.lock

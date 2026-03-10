@@ -1,3 +1,7 @@
+defaults:
+  - _self_
+  - solver: random
+
 seed: 42
 
 env:
@@ -7,7 +11,7 @@ env:
   reward_mode: normalized_dense
   num_envs: 16
   max_episode_steps: 100
-  num_cubes: 3
+  extra_kwargs: {}
   record_video: false
   render_mode: rgb_array
 
@@ -18,4 +22,3 @@ logging:
 
 run:
   num_episodes: 100
-  policy: random

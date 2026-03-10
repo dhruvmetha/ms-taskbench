@@ -1,0 +1,11 @@
+# @package _global_
+run:
+  solver: shelf_reachability
+env:
+  env_id: ShelfEnv-v1
+  control_mode: pd_joint_pos
+  num_envs: 1
+  reward_mode: none
+  record_video: true
+  extra_kwargs:
+    num_objects: 0

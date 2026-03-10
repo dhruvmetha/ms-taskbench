@@ -13,6 +13,8 @@ dependencies = [
     "omegaconf>=2.3",
     "wandb",
     "gymnasium",
+    "mshab",
+    "setuptools<82",
 ]
 
 [project.optional-dependencies]
@@ -20,3 +22,19 @@ dev = ["black", "isort"]
 
 [tool.setuptools.packages.find]
 include = ["ps_bed*"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu121" }
+mshab = { path = "../mshab", editable = true }
+
+[tool.uv]
+prerelease = "allow"
+override-dependencies = [
+    "mplib>=0.2.1",
+    "numpy>=1.26,<2.0",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true

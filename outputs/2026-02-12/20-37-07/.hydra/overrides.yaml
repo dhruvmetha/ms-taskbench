@@ -1,4 +1,0 @@
-- env.env_id=StackCubeDistractor-v1
-- run.policy=pick_place
-- env.record_video=true
-- run.num_episodes=1

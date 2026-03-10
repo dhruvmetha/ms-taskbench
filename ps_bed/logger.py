@@ -1,10 +1,10 @@
-from ps_bed.config import Config
+from omegaconf import OmegaConf
 
 
 class Logger:
     """Thin wrapper around WandB for episode logging."""
 
-    def __init__(self, cfg: Config):
+    def __init__(self, cfg):
         self._enabled = cfg.logging.use_wandb
         self._run = None
         if self._enabled:
@@ -15,8 +15,8 @@ class Logger:
                 group=cfg.logging.group,
                 config={
                     "seed": cfg.seed,
-                    "env": dict(cfg.env.__dict__) if hasattr(cfg.env, "__dict__") else {},
-                    "run": dict(cfg.run.__dict__) if hasattr(cfg.run, "__dict__") else {},
+                    "env": OmegaConf.to_container(cfg.env, resolve=True),
+                    "run": OmegaConf.to_container(cfg.run, resolve=True),
                 },
             )
 
