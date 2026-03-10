@@ -13,7 +13,6 @@ dependencies = [
     "omegaconf>=2.3",
     "wandb",
     "gymnasium",
-    "mshab",
     "setuptools<82",
 ]
 
@@ -25,8 +24,6 @@ include = ["ps_bed*"]
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu121" }
-mshab = { path = "../mshab", editable = true }
-
 [tool.uv]
 prerelease = "allow"
 override-dependencies = [

@@ -23,12 +23,8 @@ import sapien
 import sapien.render
 from transforms3d.euler import euler2quat
 
-from ps_bed.skills.motion import (
-    attach_object,
-    detach_object,
-    setup_planner,
-)
-from ps_bed.skills.primitives import pick, place, push
+from ps_bed.skills.motion import setup_planner
+from ps_bed.skills.primitives import Pick, Place, Push
 from ps_bed.solvers.base import BaseSolver
 
 logger = logging.getLogger("ps_bed.solvers.demo_recorder")
@@ -146,6 +142,11 @@ class DemoRecorderSolver(BaseSolver):
         print(HELP_TEXT)
         render = lambda: env.render_human()
 
+        # Initialize skills with shared context
+        pick = Pick(env, planner, step_callback=render)
+        place = Place(env, planner, step_callback=render)
+        push = Push(env, planner, step_callback=render)
+
         # Create push markers once (hidden off-screen until needed)
         start_marker = _create_marker(env, color=[0.0, 1.0, 0.0], name="_push_start")
         end_marker = _create_marker(env, color=[1.0, 0.0, 0.0], name="_push_end")
@@ -170,9 +171,8 @@ class DemoRecorderSolver(BaseSolver):
                         print("[!] Already holding — place it first")
                         continue
                     print(f"[pick] Picking {cube_name}...")
-                    result = pick(env, planner, cube, step_callback=render)
+                    result = pick(cube)
                     if result.success:
-                        attach_object(planner, result.obj_size)
                         held_cube = (cube, cube_name, result)
                         print(f"[pick] OK")
                     else:
@@ -201,11 +201,9 @@ class DemoRecorderSolver(BaseSolver):
                         pick_result.lift_pose.q,
                     )
                     result = place(
-                        env, planner, release_pose,
+                        release_pose,
                         retract_height=pick_result.lift_pose.p[2],
-                        step_callback=render,
                     )
-                    detach_object(planner)
                     if result.success:
                         print(f"[place] OK")
                     else:
@@ -262,8 +260,7 @@ class DemoRecorderSolver(BaseSolver):
                     _show_marker(end_marker, pos)
                     print(f"[push] End: [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}] (red)")
                     print("[push] Executing...")
-                    result = push(env, planner, push_start_pose, push_end_pose,
-                                  step_callback=render)
+                    result = push(push_start_pose, push_end_pose)
                     if result.success:
                         print("[push] OK")
                     else:
@@ -298,6 +295,10 @@ class DemoRecorderSolver(BaseSolver):
                     f"cube_{i}": cube.pose.p[0].cpu().numpy().tolist()
                     for i, cube in enumerate(cubes)
                 }
+                # Re-initialize skills with new planner
+                pick = Pick(env, planner, step_callback=render)
+                place = Place(env, planner, step_callback=render)
+                push = Push(env, planner, step_callback=render)
                 held_cube = None
                 program_steps = []
                 state = "idle"

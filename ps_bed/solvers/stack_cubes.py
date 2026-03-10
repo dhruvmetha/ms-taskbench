@@ -1,7 +1,6 @@
-"""Unified cube-stacking solver using pick/place primitives.
+"""Unified cube-stacking solver using pick/place skill objects.
 
-Replaces both the 2-cube and N-cube solvers with a single solver that
-loops over ``pick()`` / ``place()`` calls.
+Loops over ``pick()`` / ``place()`` calls to stack N cubes into a tower.
 The 2-cube case (``StackCube-v1``) is just ``n=2``.
 """
 
@@ -14,11 +13,9 @@ from ps_bed.recorder import StateRecorder
 from ps_bed.skills.motion import (
     GRIPPER_OPEN,
     actuate_gripper,
-    attach_object,
-    detach_object,
     setup_planner,
 )
-from ps_bed.skills.primitives import pick, place
+from ps_bed.skills.primitives import Pick, Place
 from ps_bed.solvers.base import BaseSolver
 
 logger = logging.getLogger("ps_bed.solvers.stack_cubes")
@@ -66,6 +63,10 @@ class StackCubesSolver(BaseSolver):
         )
         recorder.record()  # initial state
 
+        # Initialize skills with shared context
+        pick = Pick(env, planner, step_callback=recorder.record)
+        place = Place(env, planner, step_callback=recorder.record)
+
         logger.info(f"Starting sequential stacking: {n} cubes, {total_steps} pick-place steps (seed={seed})")
 
         for i in range(total_steps):
@@ -78,8 +79,7 @@ class StackCubesSolver(BaseSolver):
 
             logger.info(f"Step {i+1}/{total_steps}: picking cube_{i+1}...")
             recorder.set_skill(f"pick(cube_{i+1})")
-            pick_result = pick(env, planner, cube_to_pick, lift_height=lift_height,
-                               step_callback=recorder.record)
+            pick_result = pick(cube_to_pick, lift_height=lift_height)
 
             if not pick_result.success:
                 logger.warning(
@@ -87,9 +87,6 @@ class StackCubesSolver(BaseSolver):
                 )
                 return self._finish(env, planner, recorder, seed,
                                     cubes_stacked=i, reason=pick_result.failure_reason)
-
-            # Tell planner about the held object for collision-aware planning
-            attach_object(planner, pick_result.obj_size)
 
             # Compute release pose: above target_cube at lift height
             goal_pose = target_cube.pose * sapien.Pose([0, 0, cube_height])
@@ -101,13 +98,9 @@ class StackCubesSolver(BaseSolver):
             logger.info(f"Step {i+1}/{total_steps}: placing on cube_{i}...")
             recorder.set_skill(f"place(cube_{i+1},cube_{i})")
             place_result = place(
-                env, planner, release_pose,
+                release_pose,
                 retract_height=pick_result.lift_pose.p[2],
-                step_callback=recorder.record,
             )
-
-            # Object released — remove from planner
-            detach_object(planner)
 
             if not place_result.success:
                 logger.warning(
