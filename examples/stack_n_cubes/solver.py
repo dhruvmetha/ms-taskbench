@@ -9,77 +9,62 @@ import logging
 import numpy as np
 import sapien
 
-from ps_bed.recorder import StateRecorder
-from ps_bed.skills.motion import (
-    GRIPPER_OPEN,
-    actuate_gripper,
-    setup_planner,
-)
-from ps_bed.skills.primitives import Pick, Place
-from ps_bed.solvers.base import BaseSolver, SolverResult
+from taskbench.recorder import StateRecorder
+from taskbench.skills.context import SkillContext
+from taskbench.skills.motion import actuate_gripper
+from taskbench.solver import BaseSolver, SolverResult, register_solver
 
-logger = logging.getLogger("ps_bed.solvers.stack_cubes")
+logger = logging.getLogger("examples.stack_cubes")
 
 
+@register_solver("stack_cubes")
 class StackCubesSolver(BaseSolver):
     """Stack N cubes into a tower using sequential pick-place primitives."""
 
-    def _get_cube_list(self, env):
-        """Return ordered cube list [base, ..., top] for any supported env.
-
-        Handles:
-        - StackNCube-v1: ``raw.cubes`` list (cube_0 is base)
-        - StackCube-v1 / StackCubeDistractor-v1: ``[cubeB, cubeA]``
-          (cubeB is the green base, cubeA is the red cube to stack)
-        """
-        raw = env.unwrapped
-        if hasattr(raw, "cubes"):
-            return raw.cubes
-        # StackCube-v1 convention: cubeA goes on top of cubeB
-        return [raw.cubeB, raw.cubeA]
-
     def solve(self, env, seed=None) -> SolverResult:
         """Stack all cubes into a tower using N-1 pick-place operations."""
-        env.reset(seed=seed)
+        # Set up recorder and skill context
+        ctx = SkillContext(env)
+        ctx.reset(seed=seed)
+
         assert env.unwrapped.control_mode in [
             "pd_joint_pos",
             "pd_joint_pos_vel",
         ], f"Unsupported control mode: {env.unwrapped.control_mode}"
 
-        planner = setup_planner(env)
         raw = env.unwrapped
-        cubes = list(self._get_cube_list(env))
+        objects = ctx.objects
+        names = list(objects.keys())
         rng = np.random.default_rng(seed)
-        rng.shuffle(cubes)
-        n = len(cubes)
+        rng.shuffle(names)
+        n = len(names)
         total_steps = n - 1
 
-        # Set up state recorder
-        objects = {f"cube_{i}": cube for i, cube in enumerate(cubes)}
+        # Set up state recorder and rebind skills with callback
         recorder = StateRecorder(
             env,
             objects=objects,
             robot_fields=["qpos", "tcp_pos", "tcp_quat", "gripper_qpos"],
         )
+        ctx.step_callback = recorder.record
+        ctx._build_skills()
         recorder.record()  # initial state
-
-        # Initialize skills with shared context
-        pick = Pick(env, planner, step_callback=recorder.record)
-        place = Place(env, planner, step_callback=recorder.record)
 
         logger.info(f"Starting sequential stacking: {n} cubes, {total_steps} pick-place steps (seed={seed})")
 
         for i in range(total_steps):
-            cube_to_pick = cubes[i + 1]
-            target_cube = cubes[i]
+            pick_name = names[i + 1]
+            target_name = names[i]
+            pick_actor = objects[pick_name]
+            target_actor = objects[target_name]
 
             # Dynamic lift height scales with stack progress
             cube_height = (raw.cube_half_size[2] * 2).item()
             lift_height = max(0.1, (i + 2) * cube_height + 0.05)
 
-            logger.info(f"Step {i+1}/{total_steps}: picking cube_{i+1}...")
-            recorder.set_skill(f"pick(cube_{i+1})")
-            pick_result = pick(cube_to_pick, lift_height=lift_height)
+            logger.info(f"Step {i+1}/{total_steps}: picking {pick_name}...")
+            recorder.set_skill(f"pick({pick_name})")
+            pick_result = ctx.pick(pick_name, lift_height=lift_height)
 
             if not pick_result.success:
                 logger.warning(
@@ -92,17 +77,16 @@ class StackCubesSolver(BaseSolver):
                     failure_reason=pick_result.failure_reason,
                 )
 
-            # Compute release pose: above target_cube at lift height
-            goal_pose = target_cube.pose * sapien.Pose([0, 0, cube_height])
-            offset = (goal_pose.p - cube_to_pick.pose.p).cpu().numpy()[0]
-            release_pose = sapien.Pose(
-                pick_result.lift_pose.p + offset, pick_result.lift_pose.q
-            )
+            # Compute release pose: above target at lift height
+            goal_pose = target_actor.pose * sapien.Pose([0, 0, cube_height])
+            offset = (goal_pose.p - pick_actor.pose.p).cpu().numpy()[0]
+            release_p = pick_result.lift_pose.p + offset
+            release_q = pick_result.lift_pose.q
 
-            logger.info(f"Step {i+1}/{total_steps}: placing on cube_{i}...")
-            recorder.set_skill(f"place(cube_{i+1},cube_{i})")
-            place_result = place(
-                release_pose,
+            logger.info(f"Step {i+1}/{total_steps}: placing {pick_name} on {target_name}...")
+            recorder.set_skill(f"place({pick_name},{target_name})")
+            place_result = ctx.place(
+                (release_p, release_q),
                 retract_height=pick_result.lift_pose.p[2],
             )
 
@@ -118,8 +102,8 @@ class StackCubesSolver(BaseSolver):
                 )
 
             # Verify placement (task-specific: check cube Z-height)
-            expected_z = (target_cube.pose.p[..., 2] + cube_height).cpu().numpy().item()
-            actual_z = cube_to_pick.pose.p[..., 2].cpu().numpy().item()
+            expected_z = (target_actor.pose.p[..., 2] + cube_height).cpu().numpy().item()
+            actual_z = pick_actor.pose.p[..., 2].cpu().numpy().item()
             if abs(actual_z - expected_z) > 0.01:
                 logger.warning(
                     f"Placement check failed: expected_z={expected_z:.4f}, "
@@ -136,9 +120,10 @@ class StackCubesSolver(BaseSolver):
 
         # Settle: step until success or timeout
         recorder.set_skill("settle")
+        rc = ctx.robot_config
         max_settle = 100
         for step in range(max_settle):
-            actuate_gripper(env, planner, GRIPPER_OPEN, steps=1,
+            actuate_gripper(env, ctx.planner, rc.gripper_open, steps=1,
                             step_callback=recorder.record)
             info = raw.evaluate()
             if info["success"].item():

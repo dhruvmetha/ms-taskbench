@@ -2,7 +2,7 @@
 
 Usage with any solver::
 
-    from ps_bed.recorder import StateRecorder
+    from taskbench.recorder import StateRecorder
 
     recorder = StateRecorder(
         env,
@@ -31,7 +31,7 @@ from typing import Dict, List, Optional
 
 import numpy as np
 
-logger = logging.getLogger("ps_bed.recorder")
+logger = logging.getLogger("taskbench.recorder")
 
 # Each extractor takes (raw_env,) and returns a numpy array
 _ROBOT_FIELD_EXTRACTORS = {

@@ -3,8 +3,8 @@ import gymnasium as gym
 from mani_skill.utils.wrappers import RecordEpisode
 from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
 
-import ps_bed.envs  # noqa: F401 — register custom envs
-from ps_bed.config import EnvConfig
+import taskbench.envs  # noqa: F401 — register custom envs
+from taskbench.config import EnvConfig
 
 
 def make_env(cfg: EnvConfig):

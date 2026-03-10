@@ -2,22 +2,43 @@
 
 All functions are module-level (no class state) and operate on a raw
 gym env with ``num_envs=1`` and ``sim_backend="cpu"``.
+
+Robot-specific constants (move group, finger length, etc.) come from
+``RobotConfig`` — see ``taskbench.skills.robot_config``.
 """
 
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING, Tuple, Union
 
 import mplib
 import numpy as np
 import sapien
 
-logger = logging.getLogger("ps_bed.skills.motion")
+if TYPE_CHECKING:
+    from taskbench.skills.robot_config import RobotConfig
 
-FINGER_LENGTH = 0.025
-GRIPPER_OPEN = 1.0
-GRIPPER_CLOSED = -1.0
-MOVE_GROUP = "panda_hand_tcp"
+logger = logging.getLogger("taskbench.skills.motion")
+
+# A pose can be a sapien.Pose or a (position, quaternion) tuple of array-likes.
+PoseLike = Union[sapien.Pose, Tuple]
+
+
+def to_sapien_pose(pose: PoseLike) -> sapien.Pose:
+    """Convert a pose-like input to sapien.Pose.
+
+    Accepts:
+        - ``sapien.Pose`` — returned as-is.
+        - ``(p, q)`` tuple — position (3,) and quaternion (4,) array-likes.
+    """
+    if isinstance(pose, sapien.Pose):
+        return pose
+    p, q = pose
+    return sapien.Pose(
+        np.asarray(p, dtype=np.float32),
+        np.asarray(q, dtype=np.float32),
+    )
 
 
 def build_action(env, qpos, gripper_state, qvel=None):
@@ -131,8 +152,13 @@ def _box_surface_points(center, half_size, res):
     return np.concatenate(faces, axis=0)
 
 
-def setup_planner(env) -> mplib.Planner:
-    """Create an mplib Planner from the env's robot."""
+def setup_planner(env, robot_config: RobotConfig) -> mplib.Planner:
+    """Create an mplib Planner from the env's robot.
+
+    Args:
+        env: Gym env (num_envs=1, sim_backend="cpu").
+        robot_config: Robot-specific constants (move group, etc.).
+    """
     raw = env.unwrapped
     agent = raw.agent
     robot = agent.robot
@@ -145,7 +171,7 @@ def setup_planner(env) -> mplib.Planner:
         srdf=agent.urdf_path.replace(".urdf", ".srdf"),
         user_link_names=link_names,
         user_joint_names=joint_names,
-        move_group=MOVE_GROUP,
+        move_group=robot_config.move_group,
     )
 
     base_pose = sapien_to_mplib_pose(agent.robot.pose)
@@ -159,10 +185,7 @@ def setup_planner(env) -> mplib.Planner:
     return planner
 
 
-GRIPPER_LINK_NAMES = {"panda_hand", "panda_leftfinger", "panda_rightfinger"}
-
-
-def _get_gripper_contacts(env):
+def _get_gripper_contacts(env, robot_config: RobotConfig):
     """Return contacts involving gripper links (hand + fingers).
 
     Returns a list of ``(contact, gripper_link_name, other_entity_name)``
@@ -170,21 +193,23 @@ def _get_gripper_contacts(env):
     """
     raw = env.unwrapped
     robot_link_names = {link.get_name() for link in raw.agent.robot.get_links()}
+    gripper_links = robot_config.gripper_link_names
 
     results = []
     for contact in raw.scene.px.get_contacts():
         names = [contact.bodies[i].entity.name for i in range(2)]
         for idx in range(2):
-            if names[idx] in GRIPPER_LINK_NAMES and names[1 - idx] not in robot_link_names:
+            if names[idx] in gripper_links and names[1 - idx] not in robot_link_names:
                 results.append((contact, names[idx], names[1 - idx]))
     return results
 
 
-def follow_path(env, result, gripper_state, refine_steps=0,
-                monitor_contacts=False, step_callback=None):
+def follow_path(env, result, gripper_state, robot_config: RobotConfig,
+                refine_steps=0, monitor_contacts=False, step_callback=None):
     """Execute a planned path, returning the last step result.
 
     Args:
+        robot_config: Robot-specific constants (for contact detection).
         monitor_contacts: If True, log warnings when gripper fingers
             contact non-robot objects during trajectory execution.
         step_callback: Optional callable invoked after each env.step()
@@ -203,7 +228,7 @@ def follow_path(env, result, gripper_state, refine_steps=0,
             step_callback()
 
         if monitor_contacts:
-            for contact, finger, other in _get_gripper_contacts(env):
+            for contact, finger, other in _get_gripper_contacts(env, robot_config):
                 force = sum(
                     np.linalg.norm(pt.impulse) for pt in contact.points
                 ) / env.unwrapped.control_timestep
@@ -249,8 +274,8 @@ def detach_object(planner):
     logger.debug("Detached object from end effector")
 
 
-def move_to_pose(env, planner, pose, gripper_state, dry_run=False,
-                  monitor_contacts=False, step_callback=None):
+def move_to_pose(env, planner, pose, gripper_state, robot_config: RobotConfig,
+                 dry_run=False, monitor_contacts=False, step_callback=None):
     """Plan and execute a motion to target pose.
 
     Tries ``plan_screw()`` first (greedy Cartesian interpolation).
@@ -280,6 +305,6 @@ def move_to_pose(env, planner, pose, gripper_state, dry_run=False,
         logger.debug("plan_pose succeeded")
     if dry_run:
         return result
-    return follow_path(env, result, gripper_state,
+    return follow_path(env, result, gripper_state, robot_config,
                        monitor_contacts=monitor_contacts,
                        step_callback=step_callback)

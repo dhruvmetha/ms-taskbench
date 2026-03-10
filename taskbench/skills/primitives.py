@@ -1,10 +1,10 @@
 """Reusable manipulation skills as composable objects.
 
-Each skill binds shared context (env, planner, step_callback) at construction,
-exposing only task-specific parameters in ``__call__``:
+Each skill binds shared context (env, planner, robot_config, step_callback)
+at construction, exposing only task-specific parameters in ``__call__``:
 
-    pick = Pick(env, planner)
-    result = pick(obj, lift_height=0.1)
+    pick = Pick(env, planner, robot_config=rc, objects=objects)
+    result = pick("cube_1", lift_height=0.1)
 
 Base class ``Skill`` provides the common interface. All skills return a
 dataclass result with ``success`` and ``failure_reason`` fields.
@@ -24,17 +24,17 @@ from mani_skill.examples.motionplanning.base_motionplanner.utils import (
     get_actor_obb,
 )
 
-from ps_bed.skills.motion import (
-    FINGER_LENGTH,
-    GRIPPER_CLOSED,
-    GRIPPER_OPEN,
+from taskbench.skills.motion import (
+    PoseLike,
     actuate_gripper,
     attach_object,
     detach_object,
     move_to_pose,
+    to_sapien_pose,
 )
+from taskbench.skills.robot_config import RobotConfig, get_robot_config
 
-logger = logging.getLogger("ps_bed.skills.primitives")
+logger = logging.getLogger("taskbench.skills.primitives")
 
 
 # ---------------------------------------------------------------------------
@@ -78,13 +78,26 @@ class PushResult(SkillResult):
 class Skill(ABC):
     """Base class for manipulation skills.
 
-    Binds shared context (env, planner, step_callback) so that
-    ``__call__`` only receives task-specific parameters.
+    Binds shared context (env, planner, robot_config, objects, step_callback)
+    so that ``__call__`` only receives task-specific parameters.
+
+    Args:
+        env: Gym env (raw or wrapped).
+        planner: mplib.Planner instance.
+        robot_config: Robot-specific constants. If None, auto-detected
+            from the env's agent.
+        objects: Dict mapping string names to scene actors.
+            Skills that need actors (e.g. Pick) resolve names through this.
+        step_callback: Optional callable invoked after each env.step().
     """
 
-    def __init__(self, env, planner, *, step_callback: Optional[Callable] = None):
+    def __init__(self, env, planner, *, robot_config: Optional[RobotConfig] = None,
+                 objects: Optional[dict[str, object]] = None,
+                 step_callback: Optional[Callable] = None):
         self.env = env
         self.planner = planner
+        self.robot_config = robot_config or get_robot_config(env)
+        self.objects = objects or {}
         self.step_callback = step_callback
 
     @abstractmethod
@@ -100,16 +113,18 @@ class Move(Skill):
     """Move the arm to a target pose.
 
     Args (at call time):
-        target_pose: sapien.Pose to move the end effector to.
+        target_pose: PoseLike to move the end effector to.
         gripper_open: Gripper state during motion (default True).
         monitor_contacts: Abort on collision during execution (default True).
     """
 
-    def __call__(self, target_pose, *, gripper_open=True,
+    def __call__(self, target_pose: PoseLike, *, gripper_open=True,
                  monitor_contacts=True) -> MoveResult:
-        gripper_state = GRIPPER_OPEN if gripper_open else GRIPPER_CLOSED
+        target_pose = to_sapien_pose(target_pose)
+        rc = self.robot_config
+        gripper_state = rc.gripper_open if gripper_open else rc.gripper_closed
         res = move_to_pose(self.env, self.planner, target_pose, gripper_state,
-                           monitor_contacts=monitor_contacts,
+                           rc, monitor_contacts=monitor_contacts,
                            step_callback=self.step_callback)
         if res == -1:
             return MoveResult(success=False, failure_reason="move_plan_failed")
@@ -127,16 +142,18 @@ class Pick(Skill):
     reach, approach, close gripper, verify grasp, lift.
 
     Args (at call time):
-        obj: SAPIEN actor to grasp.
+        obj_name: String name of the object to grasp (resolved via
+            ``self.objects``).
         lift_height: Height above grasp pose to lift to (default 0.1m).
         verify_grasp: Check ``agent.is_grasping()`` after closing (default True).
     """
 
-    def __call__(self, obj, *, lift_height=0.1,
+    def __call__(self, obj_name: str, *, lift_height=0.1,
                  verify_grasp=True) -> PickResult:
-        env, planner = self.env, self.planner
+        obj = self.objects[obj_name]
+        env, planner, rc = self.env, self.planner, self.robot_config
         raw = env.unwrapped
-        move = Move(env, planner, step_callback=self.step_callback)
+        move = Move(env, planner, robot_config=rc, step_callback=self.step_callback)
 
         # Compute grasp pose from OBB
         obb = get_actor_obb(obj)
@@ -149,7 +166,7 @@ class Pick(Skill):
             obb,
             approaching=approaching,
             target_closing=target_closing,
-            depth=FINGER_LENGTH,
+            depth=rc.finger_length,
         )
         closing, center = grasp_info["closing"], grasp_info["center"]
         grasp_pose = raw.agent.build_grasp_pose(approaching, closing, center)
@@ -163,7 +180,8 @@ class Pick(Skill):
         for angle in angles:
             delta_pose = sapien.Pose(q=euler2quat(0, 0, angle))
             candidate = grasp_pose * delta_pose
-            res = move_to_pose(env, planner, candidate, GRIPPER_OPEN, dry_run=True)
+            res = move_to_pose(env, planner, candidate, rc.gripper_open, rc,
+                               dry_run=True)
             if res == -1:
                 continue
             grasp_pose = candidate
@@ -186,7 +204,7 @@ class Pick(Skill):
             return PickResult(success=False, failure_reason="grasp_approach_failed")
 
         # Close gripper
-        actuate_gripper(env, planner, GRIPPER_CLOSED,
+        actuate_gripper(env, planner, rc.gripper_closed,
                         step_callback=self.step_callback)
 
         # Verify grasp
@@ -227,16 +245,17 @@ class Place(Skill):
     """Move to target pose, release the held object, and retract upward.
 
     Args (at call time):
-        target_pose: sapien.Pose where the gripper moves before releasing.
+        target_pose: PoseLike where the gripper moves before releasing.
         settling_steps: Steps to let physics settle after release (default 10).
         retract_height: Absolute Z height to retract to after release.
             If None, retracts 0.1m above the release pose.
     """
 
-    def __call__(self, target_pose, *, settling_steps=10,
+    def __call__(self, target_pose: PoseLike, *, settling_steps=10,
                  retract_height=None) -> PlaceResult:
-        env, planner = self.env, self.planner
-        move = Move(env, planner, step_callback=self.step_callback)
+        target_pose = to_sapien_pose(target_pose)
+        env, planner, rc = self.env, self.planner, self.robot_config
+        move = Move(env, planner, robot_config=rc, step_callback=self.step_callback)
 
         # Move to target pose (contacts off — gripper is holding an object)
         result = move(target_pose, gripper_open=False, monitor_contacts=False)
@@ -244,14 +263,14 @@ class Place(Skill):
             return PlaceResult(success=False, failure_reason="place_move_failed")
 
         # Release gripper
-        actuate_gripper(env, planner, GRIPPER_OPEN,
+        actuate_gripper(env, planner, rc.gripper_open,
                         step_callback=self.step_callback)
 
         # Object released — remove from planner
         detach_object(planner)
 
         # Settle
-        actuate_gripper(env, planner, GRIPPER_OPEN, steps=settling_steps,
+        actuate_gripper(env, planner, rc.gripper_open, steps=settling_steps,
                         step_callback=self.step_callback)
 
         # Retract: move straight up to clear before next action
@@ -276,18 +295,20 @@ class Push(Skill):
     """Lift for clearance, close gripper, approach, sweep, lift, open.
 
     Args (at call time):
-        approach_pose: sapien.Pose to move to before pushing (no contact).
-        push_pose: sapien.Pose to sweep toward (contact expected).
+        approach_pose: PoseLike to move to before pushing (no contact).
+        push_pose: PoseLike to sweep toward (contact expected).
         clearance_height: Height to lift above current position before
             approaching (default 0.1m).
         lift_height: Height to lift above push_pose after pushing (default 0.1m).
     """
 
-    def __call__(self, approach_pose, push_pose, *,
+    def __call__(self, approach_pose: PoseLike, push_pose: PoseLike, *,
                  clearance_height=0.1, lift_height=0.1) -> PushResult:
-        env, planner = self.env, self.planner
+        approach_pose = to_sapien_pose(approach_pose)
+        push_pose = to_sapien_pose(push_pose)
+        env, planner, rc = self.env, self.planner, self.robot_config
         raw = env.unwrapped
-        move = Move(env, planner, step_callback=self.step_callback)
+        move = Move(env, planner, robot_config=rc, step_callback=self.step_callback)
 
         # Lift from current position for clearance
         tcp_pose = raw.agent.tcp.pose
@@ -303,7 +324,7 @@ class Push(Skill):
             return PushResult(success=False, failure_reason="clearance_lift_failed")
 
         # Close gripper for flat push surface
-        actuate_gripper(env, planner, GRIPPER_CLOSED,
+        actuate_gripper(env, planner, rc.gripper_closed,
                         step_callback=self.step_callback)
 
         # Approach — closed gripper, contact monitoring on
@@ -326,7 +347,7 @@ class Push(Skill):
             logger.warning("Push lift failed, continuing anyway")
 
         # Open gripper once clear
-        actuate_gripper(env, planner, GRIPPER_OPEN,
+        actuate_gripper(env, planner, rc.gripper_open,
                         step_callback=self.step_callback)
 
         return PushResult(success=True, step_result=result.step_result)

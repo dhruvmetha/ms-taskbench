@@ -12,30 +12,32 @@ import numpy as np
 import sapien
 from PIL import Image
 
-from ps_bed.skills.motion import (
-    GRIPPER_OPEN,
+from taskbench.skills.motion import (
     add_collision_boxes,
     follow_path,
     move_to_pose,
     setup_planner,
 )
-from ps_bed.solvers.base import BaseSolver, SolverResult
+from taskbench.skills.robot_config import get_robot_config
+from taskbench.solver import BaseSolver, SolverResult, register_solver
 
-logger = logging.getLogger("ps_bed.solvers.shelf_reachability")
+logger = logging.getLogger("examples.shelf_reachability")
 
 # Gripper pointing into shelf (+X direction), wxyz
 Q_INTO_SHELF = [0.7071068, 0.0, 0.7071068, 0.0]
 
 
+@register_solver("shelf_reachability")
 class ShelfReachabilitySolver(BaseSolver):
     """Sweep a grid through the shelf and report reachability."""
 
     def solve(self, env, seed=None) -> SolverResult:
         env.reset(seed=seed)
         raw = env.unwrapped
+        rc = get_robot_config(env)
 
         # Get shelf geometry
-        from ps_bed.envs.shelf_env import (
+        from taskbench.envs.shelf_env import (
             SHELF_BACK_X,
             SHELF_CEIL_Z,
             SHELF_FRONT_X,
@@ -69,12 +71,13 @@ class ShelfReachabilitySolver(BaseSolver):
                 for iz, z in enumerate(zs):
                     # Reset robot to home each time for clean start
                     env.reset(seed=seed)
-                    planner = setup_planner(env)
+                    planner = setup_planner(env, rc)
                     add_collision_boxes(planner, boxes, resolution=0.02)
 
                     pose = sapien.Pose(p=[x, y, z], q=Q_INTO_SHELF)
                     result = move_to_pose(
-                        env, planner, pose, GRIPPER_OPEN, dry_run=True,
+                        env, planner, pose, rc.gripper_open, rc,
+                        dry_run=True,
                     )
                     ok = result != -1
                     results[ix, iy, iz] = ok
@@ -121,11 +124,11 @@ class ShelfReachabilitySolver(BaseSolver):
                 "x=%.2f y=%.2f z=%.2f", x, y, z,
             )
             env.reset(seed=seed)
-            planner = setup_planner(env)
+            planner = setup_planner(env, rc)
             add_collision_boxes(planner, boxes, resolution=0.02)
             pose = sapien.Pose(p=[x, y, z], q=Q_INTO_SHELF)
             step_result = move_to_pose(
-                env, planner, pose, GRIPPER_OPEN,
+                env, planner, pose, rc.gripper_open, rc,
             )
             if step_result != -1:
                 try:

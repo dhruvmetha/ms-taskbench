@@ -13,7 +13,7 @@ import sapien.render
 import torch
 
 from mani_skill.agents.robots import Panda
-from mani_skill.envs.sapien_env import BaseEnv
+from taskbench.envs.base import TaskEnv
 from mani_skill.sensors.camera import CameraConfig
 from mani_skill.utils import sapien_utils
 from mani_skill.utils.building import actors
@@ -63,7 +63,7 @@ YCB_MODEL_IDS = [
 
 
 @register_env("BinWithObjects-v1", max_episode_steps=200, asset_download_ids=["ycb"])
-class BinWithObjectsEnv(BaseEnv):
+class BinWithObjectsEnv(TaskEnv):
     """Bin on table filled with a mix of colorful primitives and YCB objects.
 
     Each reset: new random objects are created, dropped into the bin one by
@@ -186,6 +186,10 @@ class BinWithObjectsEnv(BaseEnv):
         builder = actors.get_actor_builder(self.scene, id=f"ycb:{model_id}")
         builder.initial_pose = sapien.Pose(p=[0, 0, 0.5 + idx * 0.1])
         return builder.build(name=f"ycb_{idx}")
+
+    def get_objects(self) -> dict[str, object]:
+        """Return a name→actor mapping for all manipulable objects."""
+        return {obj.name: obj for obj in self.objects}
 
     def _load_scene(self, options: dict):
         self.table_scene = TableSceneBuilder(

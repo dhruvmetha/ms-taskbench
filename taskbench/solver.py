@@ -1,0 +1,107 @@
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Optional
+
+
+@dataclass
+class SolverResult:
+    """Structured result from a solver run."""
+
+    success: bool
+    reward: float = 0.0
+    elapsed_steps: int = 0
+    info: dict = field(default_factory=dict)
+    failure_reason: Optional[str] = None
+
+
+class BaseSolver(ABC):
+    """Abstract base class for task solvers.
+
+    Subclasses must implement ``solve()``. Env config requirements (control_mode,
+    num_envs, etc.) are declared in the solver's Hydra config group YAML, not here.
+    """
+
+    @abstractmethod
+    def solve(self, env, seed=None) -> SolverResult:
+        """Run the solver on a single raw gym env.
+
+        Args:
+            env: A gymnasium env (num_envs=1, cpu backend).
+            seed: Random seed for env reset.
+
+        Returns:
+            SolverResult with success status, reward, and info dict.
+        """
+        ...
+
+
+SOLVER_REGISTRY: dict[str, type] = {}
+
+
+def register_solver(name: str):
+    """Decorator to register a solver class.
+
+    Usage::
+
+        @register_solver("my_task")
+        class MyTaskSolver(BaseSolver):
+            def solve(self, env, seed=None) -> SolverResult:
+                ...
+    """
+
+    def _register(cls):
+        if not issubclass(cls, BaseSolver):
+            raise TypeError(
+                f"Solver {name!r} must inherit from BaseSolver, "
+                f"got {cls.__name__}"
+            )
+        if name in SOLVER_REGISTRY:
+            raise ValueError(f"Solver {name!r} already registered")
+        SOLVER_REGISTRY[name] = cls
+        return cls
+
+    return _register
+
+
+_discovered = False
+
+
+def discover_solvers():
+    """Auto-discover solver modules under the ``examples`` package.
+
+    Walks ``examples.*`` looking for modules named ``solver`` and imports
+    them, which triggers their ``@register_solver`` decorators.
+    """
+    global _discovered
+    if _discovered:
+        return
+    _discovered = True
+
+    import importlib
+    import pkgutil
+
+    try:
+        import examples
+    except ImportError:
+        return
+
+    for _importer, modname, _ispkg in pkgutil.walk_packages(
+        examples.__path__, prefix="examples."
+    ):
+        if modname.endswith(".solver"):
+            importlib.import_module(modname)
+
+
+def get_solver(name: str) -> BaseSolver:
+    """Look up and instantiate a solver by registry name.
+
+    Triggers auto-discovery on first call.
+    Raises KeyError if the name is not registered.
+    """
+    discover_solvers()
+
+    if name not in SOLVER_REGISTRY:
+        available = ", ".join(sorted(SOLVER_REGISTRY))
+        raise KeyError(f"Unknown solver {name!r}. Available: {available}")
+
+    return SOLVER_REGISTRY[name]()

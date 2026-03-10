@@ -20,7 +20,7 @@ class EnvConfig:
 @dataclass
 class LoggingConfig:
     use_wandb: bool = False
-    project: str = "ps_bed"
+    project: str = "taskbench"
     group: str = "stackcube"
 
 

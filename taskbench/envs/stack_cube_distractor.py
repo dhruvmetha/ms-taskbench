@@ -77,6 +77,14 @@ class StackCubeDistractorEnv(StackCubeEnv):
             )
             self.cubeC.set_pose(Pose.create_from_pq(p=xyz, q=qs))
 
+    def get_objects(self) -> dict[str, object]:
+        """Return a name→actor mapping for all manipulable objects."""
+        return {
+            "cube_0": self.cubeB,   # green (base)
+            "cube_1": self.cubeA,   # red (stack on top)
+            "cube_2": self.cubeC,   # blue (distractor)
+        }
+
     def _get_obs_extra(self, info: dict):
         obs = super()._get_obs_extra(info)
         if "state" in self.obs_mode:

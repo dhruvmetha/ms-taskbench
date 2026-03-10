@@ -10,7 +10,7 @@ import numpy as np
 import sapien
 import torch
 from mani_skill.agents.robots import Fetch, Panda
-from mani_skill.envs.sapien_env import BaseEnv
+from taskbench.envs.base import TaskEnv
 from mani_skill.envs.utils import randomization
 from mani_skill.sensors.camera import CameraConfig
 from mani_skill.utils import common
@@ -31,7 +31,7 @@ CUBE_COLORS = [
 
 
 @register_env("StackNCube-v1", max_episode_steps=250)
-class StackNCubeEnv(BaseEnv):
+class StackNCubeEnv(TaskEnv):
     """Parameterized N-cube stacking environment.
 
     Creates N cubes on a table. Success requires stacking all cubes in
@@ -97,6 +97,10 @@ class StackNCubeEnv(BaseEnv):
                 initial_pose=sapien.Pose(p=[i * 0.1, 0, 0.1]),
             )
             self.cubes.append(cube)
+
+    def get_objects(self) -> dict[str, object]:
+        """Return a name→actor mapping for all manipulable objects."""
+        return {f"cube_{i}": cube for i, cube in enumerate(self.cubes)}
 
     def _initialize_episode(self, env_idx: torch.Tensor, options: dict):
         with torch.device(self.device):

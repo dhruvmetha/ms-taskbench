@@ -4,9 +4,9 @@ import hydra
 import numpy as np
 import torch
 
-from ps_bed.config import Config
-from ps_bed.env import make_env, make_single_env
-from ps_bed.logger import Logger
+from taskbench.config import Config
+from taskbench.envs.factory import make_env, make_single_env
+from taskbench.logger import Logger
 
 
 def seed_everything(seed: int):
@@ -89,7 +89,7 @@ def run_random(config, logger: Logger):
 
 def run_solver(config, logger: Logger):
     """Run episodes with a registered solver (motion planner)."""
-    from ps_bed.solvers import get_solver
+    from taskbench.solver import get_solver
 
     solver = get_solver(config.run.solver)
 

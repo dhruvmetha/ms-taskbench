@@ -1,7 +1,7 @@
 """Interactive demo recorder: compose skill programs by clicking cubes in the SAPIEN viewer.
 
 Usage:
-    uv run python -m ps_bed.run solver=demo_recorder env.env_id=StackNCube-v1 \
+    uv run python -m taskbench.run solver=demo_recorder env.env_id=StackNCube-v1 \
         +env.extra_kwargs.num_cubes=3 run.num_episodes=1
 
 Keyboard shortcuts:
@@ -23,11 +23,10 @@ import sapien
 import sapien.render
 from transforms3d.euler import euler2quat
 
-from ps_bed.skills.motion import setup_planner
-from ps_bed.skills.primitives import Pick, Place, Push
-from ps_bed.solvers.base import BaseSolver, SolverResult
+from taskbench.skills.context import SkillContext
+from taskbench.solver import BaseSolver, SolverResult, register_solver
 
-logger = logging.getLogger("ps_bed.solvers.demo_recorder")
+logger = logging.getLogger("examples.demo_recorder")
 
 HELP_TEXT = """
 ╔══════════════════════════════════════════════╗
@@ -51,22 +50,17 @@ HELP_TEXT = """
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _get_cube_list(env):
-    """Return cube list for any supported env."""
-    raw = env.unwrapped
-    if hasattr(raw, "cubes"):
-        return raw.cubes
-    return [raw.cubeB, raw.cubeA]
+def _resolve_selected_object(viewer, objects):
+    """Match the viewer's selected entity to a named object.
 
-
-def _resolve_selected_cube(viewer, cubes):
-    """Match the viewer's selected entity to one of our cubes."""
+    Returns (actor, name) or (None, None) if no match.
+    """
     entity = viewer.selected_entity
     if entity is None:
         return None, None
-    for i, cube in enumerate(cubes):
-        if entity.name.endswith(cube.name):
-            return cube, f"cube_{i}"
+    for name, actor in objects.items():
+        if entity.name.endswith(actor.name):
+            return actor, name
     return None, None
 
 
@@ -111,21 +105,24 @@ def _save_demo(scene_config, program_steps, path="demo_record.json"):
 # Solver
 # ---------------------------------------------------------------------------
 
+@register_solver("demo_recorder")
 class DemoRecorderSolver(BaseSolver):
     """Interactive solver: compose skill programs by clicking cubes."""
 
     def solve(self, env, seed=None) -> SolverResult:
-        env.reset(seed=seed)
-        planner = setup_planner(env)
+        render = lambda: env.render_human()
+        ctx = SkillContext(env, step_callback=render)
+        ctx.reset(seed=seed)
+
         raw = env.unwrapped
-        cubes = _get_cube_list(env)
+        objects = ctx.objects
 
         scene_config = {
             "env_id": raw.spec.id,
-            "num_cubes": len(cubes),
+            "num_objects": len(objects),
             "initial_poses": {
-                f"cube_{i}": cube.pose.p[0].cpu().numpy().tolist()
-                for i, cube in enumerate(cubes)
+                name: actor.pose.p[0].cpu().numpy().tolist()
+                for name, actor in objects.items()
             },
         }
 
@@ -140,12 +137,6 @@ class DemoRecorderSolver(BaseSolver):
                 break
 
         print(HELP_TEXT)
-        render = lambda: env.render_human()
-
-        # Initialize skills with shared context
-        pick = Pick(env, planner, step_callback=render)
-        place = Place(env, planner, step_callback=render)
-        push = Push(env, planner, step_callback=render)
 
         # Create push markers once (hidden off-screen until needed)
         start_marker = _create_marker(env, color=[0.0, 1.0, 0.0], name="_push_start")
@@ -155,7 +146,8 @@ class DemoRecorderSolver(BaseSolver):
         program_steps = []
         held_cube = None       # (actor, name, pick_result) when holding
         state = "idle"         # idle | awaiting_push_start | awaiting_push_end
-        push_start_pose = None
+        push_start_pos = None
+        push_start_quat = None
 
         while not viewer.closed:
             env.render_human()
@@ -163,7 +155,7 @@ class DemoRecorderSolver(BaseSolver):
             # --- IDLE: pick / place / push entry ---
             if state == "idle":
                 if viewer.window.key_press("1"):  # PICK
-                    cube, cube_name = _resolve_selected_cube(viewer, cubes)
+                    cube, cube_name = _resolve_selected_object(viewer, objects)
                     if cube is None:
                         print("[!] Click a cube first")
                         continue
@@ -171,7 +163,7 @@ class DemoRecorderSolver(BaseSolver):
                         print("[!] Already holding — place it first")
                         continue
                     print(f"[pick] Picking {cube_name}...")
-                    result = pick(cube)
+                    result = ctx.pick(cube_name)
                     if result.success:
                         held_cube = (cube, cube_name, result)
                         print(f"[pick] OK")
@@ -186,7 +178,7 @@ class DemoRecorderSolver(BaseSolver):
                     if held_cube is None:
                         print("[!] Nothing held — pick first (1)")
                         continue
-                    target_cube, target_name = _resolve_selected_cube(viewer, cubes)
+                    target_cube, target_name = _resolve_selected_object(viewer, objects)
                     if target_cube is None:
                         print("[!] Click the target cube first")
                         continue
@@ -196,12 +188,10 @@ class DemoRecorderSolver(BaseSolver):
                     goal_pose = target_cube.pose * sapien.Pose([0, 0, cube_height])
                     held_actor = held_cube[0]
                     offset = (goal_pose.p - held_actor.pose.p).cpu().numpy()[0]
-                    release_pose = sapien.Pose(
-                        pick_result.lift_pose.p + offset,
-                        pick_result.lift_pose.q,
-                    )
-                    result = place(
-                        release_pose,
+                    release_p = pick_result.lift_pose.p + offset
+                    release_q = pick_result.lift_pose.q
+                    result = ctx.place(
+                        (release_p, release_q),
                         retract_height=pick_result.lift_pose.p[2],
                     )
                     if result.success:
@@ -234,14 +224,13 @@ class DemoRecorderSolver(BaseSolver):
                     print("[push] Cancelled")
                     state = "idle"
                 elif viewer.window.key_press("enter"):
-                    pos = np.array(transform_window._gizmo_pose.p[:3],
-                                   dtype=np.float32)
-                    tcp_quat = np.array(euler2quat(0, np.pi, 0),
-                                        dtype=np.float32)
-                    push_start_pose = sapien.Pose(pos, tcp_quat)
-                    _show_marker(start_marker, pos)
+                    push_start_pos = np.array(
+                        transform_window._gizmo_pose.p[:3], dtype=np.float32)
+                    push_start_quat = np.array(
+                        euler2quat(0, np.pi, 0), dtype=np.float32)
+                    _show_marker(start_marker, push_start_pos)
                     state = "awaiting_push_end"
-                    print(f"[push] Start: [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}] (green)")
+                    print(f"[push] Start: [{push_start_pos[0]:.3f}, {push_start_pos[1]:.3f}, {push_start_pos[2]:.3f}] (green)")
                     print("[push] Drag gizmo to sweep END → press Enter")
 
             # --- PUSH: confirm end & execute ---
@@ -249,18 +238,20 @@ class DemoRecorderSolver(BaseSolver):
                 if viewer.window.key_press("escape"):
                     print("[push] Cancelled")
                     _hide_marker(start_marker)
-                    push_start_pose = None
+                    push_start_pos = None
                     state = "idle"
                 elif viewer.window.key_press("enter"):
-                    pos = np.array(transform_window._gizmo_pose.p[:3],
-                                   dtype=np.float32)
-                    tcp_quat = np.array(euler2quat(0, np.pi, 0),
-                                        dtype=np.float32)
-                    push_end_pose = sapien.Pose(pos, tcp_quat)
-                    _show_marker(end_marker, pos)
-                    print(f"[push] End: [{pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}] (red)")
+                    push_end_pos = np.array(
+                        transform_window._gizmo_pose.p[:3], dtype=np.float32)
+                    push_end_quat = np.array(
+                        euler2quat(0, np.pi, 0), dtype=np.float32)
+                    _show_marker(end_marker, push_end_pos)
+                    print(f"[push] End: [{push_end_pos[0]:.3f}, {push_end_pos[1]:.3f}, {push_end_pos[2]:.3f}] (red)")
                     print("[push] Executing...")
-                    result = push(push_start_pose, push_end_pose)
+                    result = ctx.push(
+                        (push_start_pos, push_start_quat),
+                        (push_end_pos, push_end_quat),
+                    )
                     if result.success:
                         print("[push] OK")
                     else:
@@ -268,14 +259,14 @@ class DemoRecorderSolver(BaseSolver):
                     program_steps.append({
                         "skill": "push",
                         "args": {
-                            "start_pose": push_start_pose.p.tolist(),
-                            "end_pose": pos.tolist(),
+                            "start_pose": push_start_pos.tolist(),
+                            "end_pose": push_end_pos.tolist(),
                         },
                         "success": result.success,
                     })
                     _hide_marker(start_marker)
                     _hide_marker(end_marker)
-                    push_start_pose = None
+                    push_start_pos = None
                     state = "idle"
 
             # --- Global keys ---
@@ -288,21 +279,17 @@ class DemoRecorderSolver(BaseSolver):
                 _hide_marker(end_marker)
                 if hasattr(env, "flush_video"):
                     env.flush_video()
-                env.reset(seed=seed)
-                planner = setup_planner(env)
-                cubes = _get_cube_list(env)
+                ctx.reset(seed=seed)
+                objects = ctx.objects
                 scene_config["initial_poses"] = {
-                    f"cube_{i}": cube.pose.p[0].cpu().numpy().tolist()
-                    for i, cube in enumerate(cubes)
+                    name: actor.pose.p[0].cpu().numpy().tolist()
+                    for name, actor in objects.items()
                 }
-                # Re-initialize skills with new planner
-                pick = Pick(env, planner, step_callback=render)
-                place = Place(env, planner, step_callback=render)
-                push = Push(env, planner, step_callback=render)
                 held_cube = None
                 program_steps = []
                 state = "idle"
-                push_start_pose = None
+                push_start_pos = None
+                push_start_quat = None
                 print("[reset] Done")
 
             elif viewer.window.key_press("q"):

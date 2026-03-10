@@ -14,7 +14,7 @@ import sapien.render
 import torch
 
 from mani_skill.agents.robots import Panda
-from mani_skill.envs.sapien_env import BaseEnv
+from taskbench.envs.base import TaskEnv
 from mani_skill.sensors.camera import CameraConfig
 from mani_skill.utils import sapien_utils
 from mani_skill.utils.building.ground import build_ground
@@ -55,7 +55,7 @@ SUCCESS_LIFT_Z = SHELF_CEIL_Z + 0.05
 
 
 @register_env("ShelfEnv-v1", max_episode_steps=300)
-class ShelfEnv(BaseEnv):
+class ShelfEnv(TaskEnv):
     """Enclosed shelf with 19 blue cylinders and 1 red target.
 
     The shelf faces the robot (open toward -X).  The robot reaches in
@@ -185,6 +185,10 @@ class ShelfEnv(BaseEnv):
 
         return parts
 
+    def get_objects(self) -> dict[str, object]:
+        """Return a name→actor mapping for all manipulable objects."""
+        return {f"cyl_{i}": obj for i, obj in enumerate(self.shelf_objects)}
+
     def _load_scene(self, options: dict):
         build_ground(self.scene, altitude=0.0)
         self.shelf_parts = self._build_shelf()
@@ -264,7 +268,7 @@ class ShelfEnv(BaseEnv):
 if __name__ == "__main__":
     import gymnasium as gym
 
-    import ps_bed.envs  # noqa: F401
+    import taskbench.envs  # noqa: F401
 
     env = gym.make(
         "ShelfEnv-v1",

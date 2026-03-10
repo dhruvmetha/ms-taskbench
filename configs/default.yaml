@@ -17,7 +17,7 @@ env:
 
 logging:
   use_wandb: false
-  project: ps_bed
+  project: taskbench
   group: stackcube
 
 run:

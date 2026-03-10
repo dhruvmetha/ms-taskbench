@@ -23,18 +23,18 @@ Entry point is Hydra-based. Solver selection uses Hydra config groups (`solver=n
 
 ```bash
 # Default run (random solver, 16 envs, 100 episodes)
-uv run python -m ps_bed.run
+uv run python -m taskbench.run
 
 # Cube stacking solver (env requirements set by configs/solver/stack_cubes.yaml)
-uv run python -m ps_bed.run solver=stack_cubes
+uv run python -m taskbench.run solver=stack_cubes
 
 # N-cube stacking with extra env kwargs (+ prefix required for new keys)
-uv run python -m ps_bed.run solver=stack_cubes env.env_id=StackNCube-v1 +env.extra_kwargs.num_cubes=3
+uv run python -m taskbench.run solver=stack_cubes env.env_id=StackNCube-v1 +env.extra_kwargs.num_cubes=3
 
 # Common overrides
-uv run python -m ps_bed.run solver=stack_cubes env.env_id=StackCubeDistractor-v1
-uv run python -m ps_bed.run env.record_video=true run.num_episodes=10
-uv run python -m ps_bed.run seed=123 logging.use_wandb=true
+uv run python -m taskbench.run solver=stack_cubes env.env_id=StackCubeDistractor-v1
+uv run python -m taskbench.run env.record_video=true run.num_episodes=10
+uv run python -m taskbench.run seed=123 logging.use_wandb=true
 ```
 
 Hydra writes timestamped output dirs under `outputs/`. Videos go to `videos/`.
@@ -42,46 +42,53 @@ Hydra writes timestamped output dirs under `outputs/`. Videos go to `videos/`.
 ## Formatting
 
 ```bash
-uv run black ps_bed/
-uv run isort ps_bed/
+uv run black taskbench/ examples/
+uv run isort taskbench/ examples/
 ```
 
 No tests exist in this repo.
 
 ## Architecture
 
-**ps_bed** is a robotics research testbed for evaluating solvers on ManiSkill3 cube-stacking tasks.
+**taskbench** is a robotics research testbed for evaluating solvers on ManiSkill3 manipulation tasks. See `docs/architecture.md` for full documentation.
 
 ### Core Flow
 
-`ps_bed/run.py` is the entry point (`@hydra.main`). It dispatches based on `cfg.run.solver`:
+`taskbench/run.py` is the entry point (`@hydra.main`). It dispatches based on `cfg.run.solver`:
 - `"random"` → `run_random()` — vectorized env (`ManiSkillVectorEnv`), samples random actions
-- Any other value → `run_solver()` — looks up the solver in `SOLVER_REGISTRY`, creates a single env, runs episode loop
+- Any other value → `run_solver()` — auto-discovers solver via `@register_solver`, creates a single env, runs episode loop
 
-Hydra's DictConfig is passed directly to functions (no dataclass reconstruction).
+### Solver System (pluggable, zero-touch)
 
-### Solver Registry (pluggable architecture)
+Solvers self-register via `@register_solver("name")` decorator in `taskbench/solver.py`. Auto-discovery walks `examples/*/solver.py` via `pkgutil`. Adding a new solver requires **no edits to core files**:
+1. Create `examples/my_solver/solver.py` with `@register_solver("my_solver")` inheriting `BaseSolver`
+2. Create `configs/solver/my_solver.yaml` with env requirements (`# @package _global_`)
+3. Run: `python -m taskbench.run solver=my_solver`
 
-Solvers are registered in `ps_bed/solvers/__init__.py` via `SOLVER_REGISTRY` (maps solver names to `"module:ClassName"` strings). Adding a new solver requires:
-1. Create `ps_bed/solvers/my_solver.py` inheriting `BaseSolver`, implement `solve()`
-2. Add one line to `SOLVER_REGISTRY`
-3. Create `configs/solver/my_solver.yaml` with env requirements (`# @package _global_`)
-4. Run: `python -m ps_bed.run solver=my_solver env.env_id=MyEnv-v1`
+### Skill System
 
-No changes to `run.py`, `env.py`, or `config.py` needed. Env-specific kwargs use `+env.extra_kwargs.key=value`.
+Skills are composable objects (`Pick`, `Place`, `Move`, `Push`) in `taskbench/skills/primitives.py`. Use `SkillContext` to eliminate boilerplate:
+```python
+ctx = SkillContext(env, step_callback=recorder.record)
+ctx.reset(seed=42)
+ctx.pick("cube_1")
+ctx.place(target_pose)
+```
+
+Robot-specific constants live in `RobotConfig` (`taskbench/skills/robot_config.py`), not hardcoded. Skills accept `PoseLike` (tuples or `sapien.Pose`) and resolve objects by string name.
 
 ### Key Modules
 
-- **`config.py`** — Hydra-compatible dataclasses (`Config`, `EnvConfig`, `LoggingConfig`, `RunConfig`). `EnvConfig.extra_kwargs` passes arbitrary kwargs to `gym.make()`.
-- **`env.py`** — Two factory functions:
-  - `make_env()` — vectorized env wrapped with `ManiSkillVectorEnv` (for RL policies)
-  - `make_single_env()` — raw gym env with `sim_backend="cpu"` (required by motion planner)
-- **`skills/motion.py`** — Low-level mplib helpers: `setup_planner()`, `move_to_pose()`, `actuate_gripper()`, `follow_path()`, `sapien_to_mplib_pose()`. `move_to_pose()` tries `plan_screw()` first, then falls back to `plan_pose()` (OMPL RRTConnect) for obstacle avoidance.
-- **`skills/primitives.py`** — Reusable `pick()` and `place()` functions with `PickResult`/`PlaceResult` dataclasses.
-- **`solvers/base.py`** — `BaseSolver` ABC with `solve()`.
-- **`solvers/stack_cubes.py`** — `StackCubesSolver` — unified N-cube stacking (registered as `stack_cubes`).
-- **`envs/stack_cube_distractor.py`** — Custom env `StackCubeDistractor-v1` extending `StackCubeEnv` with a blue distractor cube.
-- **`logger.py`** — Optional WandB logging wrapper.
+- **`taskbench/config.py`** — Hydra-compatible dataclasses (`Config`, `EnvConfig`, `LoggingConfig`, `RunConfig`).
+- **`taskbench/envs/factory.py`** — `make_env()` (vectorized) and `make_single_env()` (raw, for motion planner).
+- **`taskbench/envs/base.py`** — `TaskEnv` base class with abstract `get_objects()`.
+- **`taskbench/solver.py`** — `BaseSolver` ABC, `SolverResult`, `@register_solver`, `discover_solvers()`.
+- **`taskbench/skills/robot_config.py`** — `RobotConfig` dataclass + `ROBOT_CONFIGS` registry.
+- **`taskbench/skills/context.py`** — `SkillContext` — bundles env + planner + objects + skills.
+- **`taskbench/skills/motion.py`** — Low-level mplib helpers: `setup_planner()`, `move_to_pose()`, `build_action()`, `PoseLike`.
+- **`taskbench/skills/primitives.py`** — Composable skill objects with `SkillResult` dataclasses.
+- **`taskbench/recorder.py`** — `StateRecorder` for capturing simulation state at control frequency.
+- **`taskbench/logger.py`** — Optional WandB logging wrapper.
 
 ### Critical Constraints (mplib / ManiSkill)
 
