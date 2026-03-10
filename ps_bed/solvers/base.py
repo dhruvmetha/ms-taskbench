@@ -1,4 +1,21 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Optional
+
+
+@dataclass
+class SolverResult:
+    """Structured result from a solver run.
+
+    Replaces the loose (obs, reward, terminated, truncated, info) tuple
+    with an explicit contract.
+    """
+
+    success: bool
+    reward: float = 0.0
+    elapsed_steps: int = 0
+    info: dict = field(default_factory=dict)
+    failure_reason: Optional[str] = None
 
 
 class BaseSolver(ABC):
@@ -9,7 +26,7 @@ class BaseSolver(ABC):
     """
 
     @abstractmethod
-    def solve(self, env, seed=None):
+    def solve(self, env, seed=None) -> SolverResult:
         """Run the solver on a single raw gym env.
 
         Args:
@@ -17,6 +34,6 @@ class BaseSolver(ABC):
             seed: Random seed for env reset.
 
         Returns:
-            (obs, reward, terminated, truncated, info) tuple.
+            SolverResult with success status, reward, and info dict.
         """
         ...

@@ -20,6 +20,23 @@ GRIPPER_CLOSED = -1.0
 MOVE_GROUP = "panda_hand_tcp"
 
 
+def build_action(env, qpos, gripper_state, qvel=None):
+    """Build an action array from joint positions and gripper state.
+
+    Handles ``pd_joint_pos`` vs ``pd_joint_pos_vel`` control modes.
+
+    Args:
+        qvel: Joint velocities for ``pd_joint_pos_vel`` mode.
+            Defaults to zero if not provided.
+    """
+    control_mode = env.unwrapped.control_mode
+    if control_mode == "pd_joint_pos_vel":
+        if qvel is None:
+            qvel = qpos * 0
+        return np.hstack([qpos, qvel, gripper_state])
+    return np.hstack([qpos, gripper_state])
+
+
 def sapien_to_mplib_pose(pose: sapien.Pose) -> mplib.pymp.Pose:
     """Convert a SAPIEN Pose to an mplib Pose (handles batched tensors)."""
     p = np.asarray(pose.p, dtype=np.float64).flatten()[:3]
@@ -174,14 +191,12 @@ def follow_path(env, result, gripper_state, refine_steps=0,
             (e.g. ``env.render_human`` for live viewer updates).
     """
     n_step = result["position"].shape[0]
-    control_mode = env.unwrapped.control_mode
+    has_velocity = "velocity" in result
     for i in range(n_step + refine_steps):
-        qpos = result["position"][min(i, n_step - 1)]
-        if control_mode == "pd_joint_pos_vel":
-            qvel = result["velocity"][min(i, n_step - 1)]
-            action = np.hstack([qpos, qvel, gripper_state])
-        else:
-            action = np.hstack([qpos, gripper_state])
+        idx = min(i, n_step - 1)
+        qpos = result["position"][idx]
+        qvel = result["velocity"][idx] if has_velocity else None
+        action = build_action(env, qpos, gripper_state, qvel=qvel)
         obs, reward, terminated, truncated, info = env.step(action)
 
         if step_callback is not None:
@@ -205,12 +220,8 @@ def actuate_gripper(env, planner, gripper_state, steps=6, step_callback=None):
     """Open or close the gripper for a number of steps."""
     robot = env.unwrapped.agent.robot
     qpos = robot.get_qpos()[0, : len(planner.joint_vel_limits)].cpu().numpy()
-    control_mode = env.unwrapped.control_mode
     for _ in range(steps):
-        if control_mode == "pd_joint_pos_vel":
-            action = np.hstack([qpos, qpos * 0, gripper_state])
-        else:
-            action = np.hstack([qpos, gripper_state])
+        action = build_action(env, qpos, gripper_state)
         obs, reward, terminated, truncated, info = env.step(action)
         if step_callback is not None:
             step_callback()

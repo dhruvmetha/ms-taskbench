@@ -25,7 +25,7 @@ from transforms3d.euler import euler2quat
 
 from ps_bed.skills.motion import setup_planner
 from ps_bed.skills.primitives import Pick, Place, Push
-from ps_bed.solvers.base import BaseSolver
+from ps_bed.solvers.base import BaseSolver, SolverResult
 
 logger = logging.getLogger("ps_bed.solvers.demo_recorder")
 
@@ -114,7 +114,7 @@ def _save_demo(scene_config, program_steps, path="demo_record.json"):
 class DemoRecorderSolver(BaseSolver):
     """Interactive solver: compose skill programs by clicking cubes."""
 
-    def solve(self, env, seed=None):
+    def solve(self, env, seed=None) -> SolverResult:
         env.reset(seed=seed)
         planner = setup_planner(env)
         raw = env.unwrapped
@@ -312,4 +312,5 @@ class DemoRecorderSolver(BaseSolver):
                 break
 
         info = raw.evaluate()
-        return None, 0.0, False, False, info
+        success = bool(info.get("success", False))
+        return SolverResult(success=success, info=dict(info))

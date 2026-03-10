@@ -103,42 +103,35 @@ def run_solver(config, logger: Logger):
     recording = config.env.record_video
 
     for ep in range(1, target_episodes + 1):
-        res = solver.solve(env, seed=config.seed + ep)
-
-        obs, reward, terminated, truncated, info = res
-
-        success = False
-        if "success" in info:
-            s = info["success"]
-            if isinstance(s, torch.Tensor):
-                success = bool(s.item())
-            else:
-                success = bool(s)
-
-        ep_return = float(reward) if not isinstance(reward, (int, float)) else reward
-        ep_length = int(info.get("elapsed_steps", 0))
+        result = solver.solve(env, seed=config.seed + ep)
 
         if recording:
             env.flush_video()
 
-        all_returns.append(ep_return)
-        all_lengths.append(ep_length)
-        all_successes.append(success)
+        all_returns.append(result.reward)
+        all_lengths.append(result.elapsed_steps)
+        all_successes.append(result.success)
 
         logger.log_episode(
-            {"episode/return": ep_return, "episode/length": ep_length, "episode/success": int(success)},
+            {
+                "episode/return": result.reward,
+                "episode/length": result.elapsed_steps,
+                "episode/success": int(result.success),
+            },
             step=ep,
         )
 
         # Print extra info keys generically
         extras = []
-        for k in ("cubes_stacked", "failure_reason"):
-            if k in info and info[k]:
-                extras.append(f"{k}={info[k]}")
+        if result.failure_reason:
+            extras.append(f"failure_reason={result.failure_reason}")
+        for k in ("cubes_stacked",):
+            if k in result.info and result.info[k]:
+                extras.append(f"{k}={result.info[k]}")
 
         rate = np.mean(all_successes)
         extra_str = "  " + "  ".join(extras) if extras else ""
-        print(f"[Episode {ep}/{target_episodes}]  success={success}  cumulative_rate={rate:.2f}{extra_str}")
+        print(f"[Episode {ep}/{target_episodes}]  success={result.success}  cumulative_rate={rate:.2f}{extra_str}")
 
     env.close()
     return all_returns, all_lengths, all_successes

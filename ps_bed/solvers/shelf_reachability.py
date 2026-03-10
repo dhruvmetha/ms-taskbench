@@ -19,7 +19,7 @@ from ps_bed.skills.motion import (
     move_to_pose,
     setup_planner,
 )
-from ps_bed.solvers.base import BaseSolver
+from ps_bed.solvers.base import BaseSolver, SolverResult
 
 logger = logging.getLogger("ps_bed.solvers.shelf_reachability")
 
@@ -30,7 +30,7 @@ Q_INTO_SHELF = [0.7071068, 0.0, 0.7071068, 0.0]
 class ShelfReachabilitySolver(BaseSolver):
     """Sweep a grid through the shelf and report reachability."""
 
-    def solve(self, env, seed=None):
+    def solve(self, env, seed=None) -> SolverResult:
         env.reset(seed=seed)
         raw = env.unwrapped
 
@@ -142,10 +142,12 @@ class ShelfReachabilitySolver(BaseSolver):
                 except RuntimeError:
                     logger.info("Snapshot skipped (no render_mode set)")
 
-        # Build return tuple
-        info = raw.evaluate()
-        info["reachable"] = reachable
-        info["total"] = total
-        info["reachable_pct"] = pct
-        info["grid_shape"] = (nx, ny, nz)
-        return None, 0.0, False, False, info
+        return SolverResult(
+            success=reachable > 0,
+            info={
+                "reachable": reachable,
+                "total": total,
+                "reachable_pct": pct,
+                "grid_shape": (nx, ny, nz),
+            },
+        )

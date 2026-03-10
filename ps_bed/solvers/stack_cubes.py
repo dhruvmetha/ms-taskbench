@@ -16,7 +16,7 @@ from ps_bed.skills.motion import (
     setup_planner,
 )
 from ps_bed.skills.primitives import Pick, Place
-from ps_bed.solvers.base import BaseSolver
+from ps_bed.solvers.base import BaseSolver, SolverResult
 
 logger = logging.getLogger("ps_bed.solvers.stack_cubes")
 
@@ -38,7 +38,7 @@ class StackCubesSolver(BaseSolver):
         # StackCube-v1 convention: cubeA goes on top of cubeB
         return [raw.cubeB, raw.cubeA]
 
-    def solve(self, env, seed=None):
+    def solve(self, env, seed=None) -> SolverResult:
         """Stack all cubes into a tower using N-1 pick-place operations."""
         env.reset(seed=seed)
         assert env.unwrapped.control_mode in [
@@ -85,8 +85,12 @@ class StackCubesSolver(BaseSolver):
                 logger.warning(
                     f"Step {i+1}/{total_steps} FAILED: {pick_result.failure_reason}"
                 )
-                return self._finish(env, planner, recorder, seed,
-                                    cubes_stacked=i, reason=pick_result.failure_reason)
+                self._save_recording(recorder, seed)
+                return SolverResult(
+                    success=False,
+                    info={"cubes_stacked": i},
+                    failure_reason=pick_result.failure_reason,
+                )
 
             # Compute release pose: above target_cube at lift height
             goal_pose = target_cube.pose * sapien.Pose([0, 0, cube_height])
@@ -106,8 +110,12 @@ class StackCubesSolver(BaseSolver):
                 logger.warning(
                     f"Step {i+1}/{total_steps} FAILED: {place_result.failure_reason}"
                 )
-                return self._finish(env, planner, recorder, seed,
-                                    cubes_stacked=i, reason=place_result.failure_reason)
+                self._save_recording(recorder, seed)
+                return SolverResult(
+                    success=False,
+                    info={"cubes_stacked": i},
+                    failure_reason=place_result.failure_reason,
+                )
 
             # Verify placement (task-specific: check cube Z-height)
             expected_z = (target_cube.pose.p[..., 2] + cube_height).cpu().numpy().item()
@@ -117,8 +125,12 @@ class StackCubesSolver(BaseSolver):
                     f"Placement check failed: expected_z={expected_z:.4f}, "
                     f"actual_z={actual_z:.4f}, diff={abs(actual_z - expected_z):.4f}"
                 )
-                return self._finish(env, planner, recorder, seed,
-                                    cubes_stacked=i, reason="placement_check_failed")
+                self._save_recording(recorder, seed)
+                return SolverResult(
+                    success=False,
+                    info={"cubes_stacked": i},
+                    failure_reason="placement_check_failed",
+                )
 
             logger.info(f"Step {i+1}/{total_steps} complete")
 
@@ -136,40 +148,20 @@ class StackCubesSolver(BaseSolver):
         # Save state recording
         self._save_recording(recorder, seed)
 
-        obs, reward, terminated, truncated, _ = place_result.step_result
         info = raw.evaluate()
-        info["cubes_stacked"] = total_steps
+        success = bool(info["success"].item())
+        elapsed = int(info.get("elapsed_steps", 0))
 
-        if not info["success"].item():
+        if not success:
             logger.warning("Stacking complete but env reports failure")
 
         logger.info(f"Stacking complete: {total_steps}/{total_steps} cubes stacked")
-        return obs, reward, terminated, truncated, info
+        return SolverResult(
+            success=success,
+            elapsed_steps=elapsed,
+            info={"cubes_stacked": total_steps},
+        )
 
     def _save_recording(self, recorder, seed):
         """Save state recording to the data/ directory."""
         recorder.save(f"data/episode_seed{seed}.npz")
-
-    def _finish(self, env, planner, recorder, seed, cubes_stacked, reason):
-        """Save recording and build failure result."""
-        self._save_recording(recorder, seed)
-        return self._make_failure_result(env, planner, cubes_stacked, reason)
-
-    def _make_failure_result(self, env, planner, cubes_stacked, reason):
-        """Build a valid (obs, reward, terminated, truncated, info) on failure."""
-        raw = env.unwrapped
-        robot = raw.agent.robot
-        qpos = robot.get_qpos()[0, : len(planner.joint_vel_limits)].cpu().numpy()
-        control_mode = raw.control_mode
-        if control_mode == "pd_joint_pos_vel":
-            action = np.hstack([qpos, qpos * 0, GRIPPER_OPEN])
-        else:
-            action = np.hstack([qpos, GRIPPER_OPEN])
-        obs, _, _, _, _ = env.step(action)
-
-        info = raw.evaluate()
-        info["cubes_stacked"] = cubes_stacked
-        info["failure_reason"] = reason
-
-        logger.warning(f"Stacking aborted: {cubes_stacked} cubes stacked")
-        return obs, 0.0, False, False, info
