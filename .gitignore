@@ -16,5 +16,3 @@ data/
 # OS
 .DS_Store
 
-# uv
-uv.lock
