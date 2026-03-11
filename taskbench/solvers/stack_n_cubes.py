@@ -14,7 +14,7 @@ from taskbench.skills.context import SkillContext
 from taskbench.skills.motion import actuate_gripper
 from taskbench.solver import BaseSolver, SolverResult, register_solver
 
-logger = logging.getLogger("examples.stack_cubes")
+logger = logging.getLogger("taskbench.solvers.stack_n_cubes")
 
 
 @register_solver("stack_cubes")

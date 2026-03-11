@@ -67,10 +67,10 @@ _discovered = False
 
 
 def discover_solvers():
-    """Auto-discover solver modules under the ``examples`` package.
+    """Auto-discover solver modules under ``taskbench.solvers``.
 
-    Walks ``examples.*`` looking for modules named ``solver`` and imports
-    them, which triggers their ``@register_solver`` decorators.
+    Imports all Python modules in the ``taskbench/solvers/`` package,
+    which triggers their ``@register_solver`` decorators.
     """
     global _discovered
     if _discovered:
@@ -80,16 +80,12 @@ def discover_solvers():
     import importlib
     import pkgutil
 
-    try:
-        import examples
-    except ImportError:
-        return
+    import taskbench.solvers as solvers_pkg
 
     for _importer, modname, _ispkg in pkgutil.walk_packages(
-        examples.__path__, prefix="examples."
+        solvers_pkg.__path__, prefix="taskbench.solvers."
     ):
-        if modname.endswith(".solver"):
-            importlib.import_module(modname)
+        importlib.import_module(modname)
 
 
 def get_solver(name: str) -> BaseSolver:

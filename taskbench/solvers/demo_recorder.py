@@ -26,7 +26,7 @@ from transforms3d.euler import euler2quat
 from taskbench.skills.context import SkillContext
 from taskbench.solver import BaseSolver, SolverResult, register_solver
 
-logger = logging.getLogger("examples.demo_recorder")
+logger = logging.getLogger("taskbench.solvers.demo_recorder")
 
 HELP_TEXT = """
 ╔══════════════════════════════════════════════╗

@@ -21,7 +21,7 @@ from taskbench.skills.motion import (
 from taskbench.skills.robot_config import get_robot_config
 from taskbench.solver import BaseSolver, SolverResult, register_solver
 
-logger = logging.getLogger("examples.shelf_reachability")
+logger = logging.getLogger("taskbench.solvers.shelf_reachability")
 
 # Gripper pointing into shelf (+X direction), wxyz
 Q_INTO_SHELF = [0.7071068, 0.0, 0.7071068, 0.0]

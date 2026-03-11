@@ -42,8 +42,8 @@ Hydra writes timestamped output dirs under `outputs/`. Videos go to `videos/`.
 ## Formatting
 
 ```bash
-uv run black taskbench/ examples/
-uv run isort taskbench/ examples/
+uv run black taskbench/
+uv run isort taskbench/
 ```
 
 No tests exist in this repo.
@@ -60,8 +60,8 @@ No tests exist in this repo.
 
 ### Solver System (pluggable, zero-touch)
 
-Solvers self-register via `@register_solver("name")` decorator in `taskbench/solver.py`. Auto-discovery walks `examples/*/solver.py` via `pkgutil`. Adding a new solver requires **no edits to core files**:
-1. Create `examples/my_solver/solver.py` with `@register_solver("my_solver")` inheriting `BaseSolver`
+Solvers self-register via `@register_solver("name")` decorator in `taskbench/solver.py`. Auto-discovery walks `taskbench/solvers/*.py` via `pkgutil`. Adding a new solver requires **no edits to core files**:
+1. Create `taskbench/solvers/my_solver.py` with `@register_solver("my_solver")` inheriting `BaseSolver`
 2. Create `configs/solver/my_solver.yaml` with env requirements (`# @package _global_`)
 3. Run: `python -m taskbench.run solver=my_solver`
 

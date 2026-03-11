@@ -20,7 +20,7 @@ dependencies = [
 dev = ["black", "isort"]
 
 [tool.setuptools.packages.find]
-include = ["taskbench*", "examples*"]
+include = ["taskbench*"]
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu121" }

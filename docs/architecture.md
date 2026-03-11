@@ -25,13 +25,10 @@ taskbench/                          # Core framework
     motion.py                       # Low-level mplib helpers
     primitives.py                   # Composable skill objects (Pick, Place, etc.)
 
-examples/                           # Reference solver implementations
-  stack_n_cubes/
-    solver.py                       # StackCubesSolver (@register_solver)
-  demo_recorder/
-    solver.py                       # DemoRecorderSolver (@register_solver)
-  shelf_reachability/
-    solver.py                       # ShelfReachabilitySolver (@register_solver)
+  solvers/
+    stack_n_cubes.py                # StackCubesSolver (@register_solver)
+    demo_recorder.py                # DemoRecorderSolver (@register_solver)
+    shelf_reachability.py           # ShelfReachabilitySolver (@register_solver)
 
 configs/
   default.yaml                      # Default Hydra config
@@ -222,7 +219,7 @@ class MyTaskSolver(BaseSolver):
         ...
 ```
 
-The `@register_solver` decorator adds the class to `SOLVER_REGISTRY`. Solvers under `examples/` are auto-discovered via `pkgutil.walk_packages` on first call to `get_solver()` — no manual imports needed.
+The `@register_solver` decorator adds the class to `SOLVER_REGISTRY`. Solvers under `taskbench/solvers/` are auto-discovered via `pkgutil.walk_packages` on first call to `get_solver()` — no manual imports needed.
 
 ### SolverResult
 
@@ -292,7 +289,7 @@ import taskbench.envs.my_task  # noqa: F401
 
 ### 2. Create the Solver
 
-Create `examples/my_task/__init__.py` (empty) and `examples/my_task/solver.py`:
+Create `taskbench/solvers/my_task.py`:
 
 ```python
 from taskbench.skills.context import SkillContext
@@ -341,7 +338,7 @@ env:
 uv run python -m taskbench.run solver=my_task
 ```
 
-The solver is auto-discovered from `examples/my_task/solver.py` (no registry edits). The config is found by Hydra in `configs/solver/` (no searchpath edits).
+The solver is auto-discovered from `taskbench/solvers/my_task.py` (no registry edits). The config is found by Hydra in `configs/solver/` (no searchpath edits).
 
 ---
 
