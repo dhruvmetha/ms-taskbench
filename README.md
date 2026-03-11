@@ -145,6 +145,87 @@ env:
 uv run python -m taskbench.run solver=my_stacker
 ```
 
+## Using as a library
+
+You don't have to go through `python -m taskbench.run`. The components are importable directly — write your own scripts for custom workflows like program synthesis, search, or evaluation.
+
+### Core components
+
+| Component | Import | Purpose |
+|-----------|--------|---------|
+| `SkillContext` | `from taskbench.skills.context import SkillContext` | Main interface — `pick()`, `place()`, `push()`, `move()` |
+| `make_single_env` | `from taskbench.envs.factory import make_single_env` | Create a single env for motion planning |
+| `StateRecorder` | `from taskbench.recorder import StateRecorder` | Record trajectories + skill programs to HDF5 |
+| `RobotConfig` | `from taskbench.skills.robot_config import get_robot_config` | Robot-specific constants |
+
+### Example: custom script
+
+```python
+# scripts/my_experiment.py
+import gymnasium as gym
+from taskbench.skills.context import SkillContext
+import taskbench.envs  # register custom envs
+
+env = gym.make(
+    "StackNCube-v1",
+    num_cubes=3,
+    obs_mode="state",
+    control_mode="pd_joint_pos",
+    reward_mode="sparse",
+    num_envs=1,
+    sim_backend="cpu",
+)
+
+ctx = SkillContext(env)
+ctx.reset(seed=42)
+
+# Use skills directly
+pick_result = ctx.pick("cube_1")
+if pick_result.success:
+    target_pos = ctx.objects["cube_0"].pose.p.cpu().numpy().flatten()
+    cube_h = (env.unwrapped.cube_half_size[2] * 2).item()
+    target_pos[2] += cube_h
+    ctx.place((target_pos, pick_result.lift_pose.q))
+
+info = env.unwrapped.evaluate()
+print(f"Success: {info['success'].item()}")
+env.close()
+```
+
+```bash
+uv run python scripts/my_experiment.py
+```
+
+### Example: adding a new task
+
+Create a new environment and solver in the repo:
+
+```python
+# taskbench/envs/my_task.py
+from mani_skill.utils.registration import register_env
+from taskbench.envs.base import TaskEnv
+
+@register_env("MyTask-v1", max_episode_steps=200)
+class MyTaskEnv(TaskEnv):
+    def get_objects(self):
+        return {"target": self.target_obj}
+
+    def _load_scene(self, options):
+        # Build scene actors ...
+
+    def evaluate(self):
+        # Return {"success": tensor}
+        ...
+```
+
+Register it in `taskbench/envs/__init__.py`:
+
+```python
+import taskbench.envs.my_task  # noqa: F401
+```
+
+Then use it from any script or through the solver system.
+
 ## Dev
 
 ```bash
