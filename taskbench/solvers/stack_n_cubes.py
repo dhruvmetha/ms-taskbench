@@ -156,9 +156,10 @@ class StackCubesSolver(BaseSolver):
         return result
 
     def _save_recording(self, recorder, seed, result):
-        """Save state recording to the data/ directory."""
+        """Save state recording to data/success/ or data/failure/."""
+        tag = "success" if result.success else "failure"
         recorder.save(
-            f"data/episode_seed{seed}.hdf5",
+            f"data/{tag}/episode_seed{seed}.hdf5",
             metadata={
                 "seed": seed,
                 "solver": "stack_cubes",
