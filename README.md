@@ -87,11 +87,63 @@ taskbench/
 
 ## Adding a new solver
 
-1. Create `taskbench/solvers/my_solver.py` with `@register_solver("my_solver")`
-2. Create `configs/solver/my_solver.yaml` with env requirements
-3. Run: `uv run python -m taskbench.run solver=my_solver`
+No edits to core files needed — solvers are auto-discovered. Just create two files:
 
-No edits to core files needed — solvers are auto-discovered.
+### 1. Solver implementation
+
+`taskbench/solvers/my_stacker.py`:
+
+```python
+from taskbench.skills.context import SkillContext
+from taskbench.solver import BaseSolver, SolverResult, register_solver
+
+@register_solver("my_stacker")
+class MyStackerSolver(BaseSolver):
+    def solve(self, env, seed=None) -> SolverResult:
+        ctx = SkillContext(env)
+        ctx.reset(seed=seed)
+
+        objects = ctx.objects  # {"cube_0": actor, "cube_1": actor, ...}
+        raw = env.unwrapped
+
+        # Pick cube_1
+        pick_result = ctx.pick("cube_1")
+        if not pick_result.success:
+            return SolverResult(success=False, failure_reason=pick_result.failure_reason)
+
+        # Place on top of cube_0
+        target_pos = objects["cube_0"].pose.p.cpu().numpy().flatten()
+        cube_h = (raw.cube_half_size[2] * 2).item()
+        target_pos[2] += cube_h
+        place_result = ctx.place((target_pos, pick_result.lift_pose.q))
+
+        info = raw.evaluate()
+        return SolverResult(success=bool(info["success"].item()))
+```
+
+Available skills on `ctx`: `pick(obj_name)`, `place(target_pose)`, `push(approach, push_pose)`, `move(target_pose)`.
+
+### 2. Hydra config
+
+`configs/solver/my_stacker.yaml`:
+
+```yaml
+# @package _global_
+run:
+  solver: my_stacker
+env:
+  env_id: StackNCube-v1
+  control_mode: pd_joint_pos
+  num_envs: 1
+  reward_mode: sparse
+  num_cubes: 3
+```
+
+### 3. Run
+
+```bash
+uv run python -m taskbench.run solver=my_stacker
+```
 
 ## Dev
 
