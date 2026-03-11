@@ -139,7 +139,18 @@ class ReplaySolver(BaseSolver):
                     info={"steps_completed": i},
                 )
 
-        info = env.unwrapped.evaluate()
+        # Settle: step until success or timeout (tower may still be wobbling)
+        from taskbench.skills.motion import actuate_gripper
+        raw = env.unwrapped
+        rc = ctx.robot_config
+        for step in range(100):
+            actuate_gripper(env, ctx.planner, rc.gripper_open, steps=1)
+            info = raw.evaluate()
+            if info["success"].item():
+                logger.debug("Settled after %d steps", step)
+                break
+
+        info = raw.evaluate()
         success = bool(info["success"].item())
         logger.info("Replay complete: success=%s", success)
         return SolverResult(success=success)
