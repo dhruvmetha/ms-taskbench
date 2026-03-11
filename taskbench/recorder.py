@@ -183,7 +183,8 @@ class StateRecorder:
 
         self.frames.append(frame)
 
-    def save(self, path, metadata: Optional[Dict[str, Any]] = None):
+    def save(self, path, metadata: Optional[Dict[str, Any]] = None,
+             hydra_cfg=None):
         """Save all recorded frames and the skill program to an HDF5 file.
 
         Args:
@@ -191,6 +192,9 @@ class StateRecorder:
             metadata: Optional dict of episode metadata to store as
                 attributes on the metadata group. Common keys:
                 seed, env_id, solver, success, failure_reason.
+            hydra_cfg: Optional resolved Hydra DictConfig. Stored as a
+                YAML string so the demo is fully self-contained and
+                reproducible (like saving config.yaml with checkpoints).
         """
         if not self.frames:
             logger.warning("No frames recorded, skipping save")
@@ -208,6 +212,9 @@ class StateRecorder:
             if metadata:
                 for key, value in metadata.items():
                     meta.attrs[key] = value
+            if hydra_cfg is not None:
+                from omegaconf import OmegaConf
+                meta.attrs["hydra_config"] = OmegaConf.to_yaml(hydra_cfg)
 
             # Robot state
             if self.robot_fields:

@@ -21,8 +21,9 @@ logger = logging.getLogger("taskbench.solvers.stack_n_cubes")
 class StackCubesSolver(BaseSolver):
     """Stack N cubes into a tower using sequential pick-place primitives."""
 
-    def solve(self, env, seed=None) -> SolverResult:
+    def solve(self, env, seed=None, cfg=None) -> SolverResult:
         """Stack all cubes into a tower using N-1 pick-place operations."""
+        self._cfg = cfg
         # Set up recorder and skill context
         ctx = SkillContext(env)
         ctx.reset(seed=seed)
@@ -166,4 +167,5 @@ class StackCubesSolver(BaseSolver):
                 "success": result.success,
                 "failure_reason": result.failure_reason or "",
             },
+            hydra_cfg=self._cfg,
         )

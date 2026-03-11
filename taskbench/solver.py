@@ -22,12 +22,14 @@ class BaseSolver(ABC):
     """
 
     @abstractmethod
-    def solve(self, env, seed=None) -> SolverResult:
+    def solve(self, env, seed=None, cfg=None) -> SolverResult:
         """Run the solver on a single raw gym env.
 
         Args:
             env: A gymnasium env (num_envs=1, cpu backend).
             seed: Random seed for env reset.
+            cfg: Optional resolved Hydra config (DictConfig). Solvers
+                can store this alongside demos for reproducibility.
 
         Returns:
             SolverResult with success status, reward, and info dict.

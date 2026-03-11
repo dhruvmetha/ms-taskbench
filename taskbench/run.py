@@ -104,7 +104,7 @@ def run_solver(config, logger: Logger):
     recording = config.env.record_video
 
     for ep in range(1, target_episodes + 1):
-        result = solver.solve(env, seed=config.seed + ep)
+        result = solver.solve(env, seed=config.seed + ep, cfg=config)
 
         if recording:
             env.flush_video()

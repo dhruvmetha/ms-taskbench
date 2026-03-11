@@ -31,7 +31,7 @@ Q_INTO_SHELF = [0.7071068, 0.0, 0.7071068, 0.0]
 class ShelfReachabilitySolver(BaseSolver):
     """Sweep a grid through the shelf and report reachability."""
 
-    def solve(self, env, seed=None) -> SolverResult:
+    def solve(self, env, seed=None, cfg=None) -> SolverResult:
         env.reset(seed=seed)
         raw = env.unwrapped
         rc = get_robot_config(env)

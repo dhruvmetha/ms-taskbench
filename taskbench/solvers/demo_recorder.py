@@ -109,7 +109,7 @@ def _save_demo(scene_config, program_steps, path="demo_record.json"):
 class DemoRecorderSolver(BaseSolver):
     """Interactive solver: compose skill programs by clicking cubes."""
 
-    def solve(self, env, seed=None) -> SolverResult:
+    def solve(self, env, seed=None, cfg=None) -> SolverResult:
         render = lambda: env.render_human()
         ctx = SkillContext(env, step_callback=render)
         ctx.reset(seed=seed)
