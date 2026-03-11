@@ -1,9 +1,10 @@
-"""State recorder for capturing simulation state at control frequency.
+"""State recorder for capturing simulation state and skill programs.
 
 Saves demonstrations in HDF5 format with structured groups::
 
     episode.hdf5
-    ├── metadata/          (attrs: control_freq, num_frames)
+    ├── metadata/          attrs: seed, env_id, solver, success,
+    │                             control_freq, num_frames
     ├── robot/
     │   ├── qpos           (num_frames, 9)
     │   ├── tcp_pos        (num_frames, 3)
@@ -16,7 +17,27 @@ Saves demonstrations in HDF5 format with structured groups::
     │   └── cube_1/
     │       ├── pos        (num_frames, 3)
     │       └── quat       (num_frames, 4)
-    └── skill              (num_frames,)  string labels
+    ├── skill              (num_frames,)  per-frame skill labels
+    └── program/
+        ├── skill          ["pick", "place", ...]  skill names
+        ├── args           ['{"obj_name": "cube_1"}', ...]  JSON kwargs
+        └── start_frame    [0, 142, ...]  frame index where each call started
+
+To replay a recorded program::
+
+    import h5py, json
+    with h5py.File("data/episode.hdf5") as f:
+        seed = int(f["metadata"].attrs["seed"])
+        env_id = f["metadata"].attrs["env_id"]
+        skills = list(f["program/skill"])
+        args = [json.loads(a) for a in f["program/args"]]
+
+    env = gym.make(env_id, ...)
+    env.reset(seed=seed)
+    ctx = SkillContext(env)
+    ctx.reset(seed=seed)
+    for skill_name, kwargs in zip(skills, args):
+        getattr(ctx, skill_name)(**kwargs)
 
 Usage::
 
@@ -29,10 +50,13 @@ Usage::
     )
     recorder.record()  # initial state
 
-    # Pass recorder.record as step_callback to any skill
-    ctx = SkillContext(env, step_callback=recorder.record)
+    recorder.record_skill_call("pick", {"obj_name": "cube_1", "lift_height": 0.13})
+    ctx.pick("cube_1", lift_height=0.13)
 
-    recorder.save("data/episode.hdf5")
+    recorder.record_skill_call("place", {"target_pose": [...], "retract_height": 0.2})
+    ctx.place(target_pose, retract_height=0.2)
+
+    recorder.save("data/episode.hdf5", metadata={"seed": 42, "success": True})
 
 Available robot_fields:
     - ``qpos``         — all joint positions (arm + fingers)
@@ -42,9 +66,10 @@ Available robot_fields:
     - ``gripper_qpos`` — finger joint positions (2,)
 """
 
+import json
 import logging
 import os
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import h5py
 import numpy as np
@@ -61,8 +86,22 @@ _ROBOT_FIELD_EXTRACTORS = {
 }
 
 
+def _serialize_arg(value):
+    """Convert a skill argument to a JSON-serializable form."""
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if hasattr(value, "p") and hasattr(value, "q"):
+        # sapien.Pose
+        p = np.asarray(value.p, dtype=np.float64).flatten().tolist()
+        q = np.asarray(value.q, dtype=np.float64).flatten().tolist()
+        return {"_type": "pose", "p": p, "q": q}
+    if isinstance(value, (tuple, list)):
+        return [_serialize_arg(v) for v in value]
+    return value
+
+
 class StateRecorder:
-    """Records simulation state at every control step.
+    """Records simulation state and skill programs at every control step.
 
     Args:
         env: Gym env (raw or wrapped — accesses ``env.unwrapped``).
@@ -85,6 +124,7 @@ class StateRecorder:
         self.robot_fields = robot_fields or []
         self.frames = []
         self._skill = ""
+        self._program_steps = []
 
         # Validate robot fields
         for field in self.robot_fields:
@@ -102,6 +142,31 @@ class StateRecorder:
         """
         self._skill = label
 
+    def record_skill_call(self, skill_name, kwargs=None):
+        """Record a skill call in the program trace.
+
+        Call this right before executing the skill. The current frame
+        count is stored as the start_frame for this step.
+
+        Args:
+            skill_name: Name of the skill (e.g. "pick", "place", "push").
+            kwargs: Dict of keyword arguments passed to the skill call.
+                Values are serialized to JSON (numpy arrays and sapien.Pose
+                are converted automatically).
+        """
+        serialized = {}
+        if kwargs:
+            for k, v in kwargs.items():
+                serialized[k] = _serialize_arg(v)
+
+        self._program_steps.append({
+            "skill": skill_name,
+            "args": serialized,
+            "start_frame": len(self.frames),
+        })
+        # Also update the per-frame skill label
+        self.set_skill(skill_name)
+
     def record(self):
         """Capture one frame of state. Call after every env.step()."""
         raw = self.raw
@@ -118,16 +183,14 @@ class StateRecorder:
 
         self.frames.append(frame)
 
-    def save(self, path):
-        """Save all recorded frames to an HDF5 file.
+    def save(self, path, metadata: Optional[Dict[str, Any]] = None):
+        """Save all recorded frames and the skill program to an HDF5 file.
 
-        Structure::
-
-            /metadata          attrs: num_frames, control_freq
-            /robot/<field>     (num_frames, ...) per robot field
-            /objects/<name>/pos   (num_frames, 3)
-            /objects/<name>/quat  (num_frames, 4)
-            /skill             (num_frames,) string labels
+        Args:
+            path: Output file path (should end in .hdf5).
+            metadata: Optional dict of episode metadata to store as
+                attributes on the metadata group. Common keys:
+                seed, env_id, solver, success, failure_reason.
         """
         if not self.frames:
             logger.warning("No frames recorded, skipping save")
@@ -141,6 +204,10 @@ class StateRecorder:
             meta = f.create_group("metadata")
             meta.attrs["num_frames"] = num_frames
             meta.attrs["control_freq"] = self.raw.control_freq
+            meta.attrs["env_id"] = self.raw.spec.id if self.raw.spec else ""
+            if metadata:
+                for key, value in metadata.items():
+                    meta.attrs[key] = value
 
             # Robot state
             if self.robot_fields:
@@ -159,13 +226,33 @@ class StateRecorder:
                     name_grp.create_dataset("pos", data=pos, compression="gzip")
                     name_grp.create_dataset("quat", data=quat, compression="gzip")
 
-            # Skill labels
+            # Per-frame skill labels
             skills = [frame["skill"] for frame in self.frames]
             dt = h5py.string_dtype()
             f.create_dataset("skill", data=skills, dtype=dt)
 
-        logger.info("Saved %d frames to %s", num_frames, path)
+            # Skill program
+            if self._program_steps:
+                prog_grp = f.create_group("program")
+                prog_grp.create_dataset(
+                    "skill",
+                    data=[s["skill"] for s in self._program_steps],
+                    dtype=dt,
+                )
+                prog_grp.create_dataset(
+                    "args",
+                    data=[json.dumps(s["args"]) for s in self._program_steps],
+                    dtype=dt,
+                )
+                prog_grp.create_dataset(
+                    "start_frame",
+                    data=[s["start_frame"] for s in self._program_steps],
+                )
+
+        logger.info("Saved %d frames, %d skill calls to %s",
+                     num_frames, len(self._program_steps), path)
 
     def clear(self):
-        """Discard all recorded frames."""
+        """Discard all recorded frames and program steps."""
         self.frames = []
+        self._program_steps = []

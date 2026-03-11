@@ -88,11 +88,13 @@ def discover_solvers():
         importlib.import_module(modname)
 
 
-def get_solver(name: str) -> BaseSolver:
+def get_solver(name: str, **kwargs) -> BaseSolver:
     """Look up and instantiate a solver by registry name.
 
     Triggers auto-discovery on first call.
     Raises KeyError if the name is not registered.
+
+    Any extra kwargs are forwarded to the solver's ``__init__``.
     """
     discover_solvers()
 
@@ -100,4 +102,4 @@ def get_solver(name: str) -> BaseSolver:
         available = ", ".join(sorted(SOLVER_REGISTRY))
         raise KeyError(f"Unknown solver {name!r}. Available: {available}")
 
-    return SOLVER_REGISTRY[name]()
+    return SOLVER_REGISTRY[name](**kwargs)

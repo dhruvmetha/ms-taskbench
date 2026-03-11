@@ -64,19 +64,21 @@ class StackCubesSolver(BaseSolver):
             lift_height = max(0.1, (i + 2) * cube_height + 0.05)
 
             logger.info(f"Step {i+1}/{total_steps}: picking {pick_name}...")
-            recorder.set_skill(f"pick({pick_name})")
+            pick_kwargs = {"obj_name": pick_name, "lift_height": lift_height}
+            recorder.record_skill_call("pick", pick_kwargs)
             pick_result = ctx.pick(pick_name, lift_height=lift_height)
 
             if not pick_result.success:
                 logger.warning(
                     f"Step {i+1}/{total_steps} FAILED: {pick_result.failure_reason}"
                 )
-                self._save_recording(recorder, seed)
-                return SolverResult(
+                result = SolverResult(
                     success=False,
                     info={"cubes_stacked": i},
                     failure_reason=pick_result.failure_reason,
                 )
+                self._save_recording(recorder, seed, result)
+                return result
 
             # Compute release pose: above target at lift height
             goal_pose = target_actor.pose * sapien.Pose([0, 0, cube_height])
@@ -85,9 +87,14 @@ class StackCubesSolver(BaseSolver):
             release_q = pick_result.lift_pose.q
 
             logger.info(f"Step {i+1}/{total_steps}: placing {pick_name} on {target_name}...")
-            recorder.set_skill(f"place({pick_name},{target_name})")
+            place_target = (release_p, release_q)
+            place_kwargs = {
+                "target_pose": place_target,
+                "retract_height": float(pick_result.lift_pose.p[2]),
+            }
+            recorder.record_skill_call("place", place_kwargs)
             place_result = ctx.place(
-                (release_p, release_q),
+                place_target,
                 retract_height=pick_result.lift_pose.p[2],
             )
 
@@ -95,12 +102,13 @@ class StackCubesSolver(BaseSolver):
                 logger.warning(
                     f"Step {i+1}/{total_steps} FAILED: {place_result.failure_reason}"
                 )
-                self._save_recording(recorder, seed)
-                return SolverResult(
+                result = SolverResult(
                     success=False,
                     info={"cubes_stacked": i},
                     failure_reason=place_result.failure_reason,
                 )
+                self._save_recording(recorder, seed, result)
+                return result
 
             # Verify placement (task-specific: check cube Z-height)
             expected_z = (target_actor.pose.p[..., 2] + cube_height).cpu().numpy().item()
@@ -110,12 +118,13 @@ class StackCubesSolver(BaseSolver):
                     f"Placement check failed: expected_z={expected_z:.4f}, "
                     f"actual_z={actual_z:.4f}, diff={abs(actual_z - expected_z):.4f}"
                 )
-                self._save_recording(recorder, seed)
-                return SolverResult(
+                result = SolverResult(
                     success=False,
                     info={"cubes_stacked": i},
                     failure_reason="placement_check_failed",
                 )
+                self._save_recording(recorder, seed, result)
+                return result
 
             logger.info(f"Step {i+1}/{total_steps} complete")
             target_name = pick_name  # next placement goes on top of this cube
@@ -132,9 +141,6 @@ class StackCubesSolver(BaseSolver):
                 logger.debug("Settled after %d steps", step)
                 break
 
-        # Save state recording
-        self._save_recording(recorder, seed)
-
         info = raw.evaluate()
         success = bool(info["success"].item())
 
@@ -142,11 +148,21 @@ class StackCubesSolver(BaseSolver):
             logger.warning("Stacking complete but env reports failure")
 
         logger.info(f"Stacking complete: {total_steps}/{total_steps} cubes stacked")
-        return SolverResult(
+        result = SolverResult(
             success=success,
             info={"cubes_stacked": total_steps},
         )
+        self._save_recording(recorder, seed, result)
+        return result
 
-    def _save_recording(self, recorder, seed):
+    def _save_recording(self, recorder, seed, result):
         """Save state recording to the data/ directory."""
-        recorder.save(f"data/episode_seed{seed}.hdf5")
+        recorder.save(
+            f"data/episode_seed{seed}.hdf5",
+            metadata={
+                "seed": seed,
+                "solver": "stack_cubes",
+                "success": result.success,
+                "failure_reason": result.failure_reason or "",
+            },
+        )

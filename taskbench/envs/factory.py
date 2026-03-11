@@ -1,16 +1,27 @@
 import gymnasium as gym
+from omegaconf import OmegaConf
 
 from mani_skill.utils.wrappers import RecordEpisode
 from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
 
 import taskbench.envs  # noqa: F401 — register custom envs
-from taskbench.config import EnvConfig
 
 
-def make_env(cfg: EnvConfig):
+def _env_kwargs(cfg):
+    """Extract extra keyword arguments for gym.make from the env config."""
+    kwargs = dict(OmegaConf.select(cfg, "extra_kwargs", default={}) or {})
+    num_cubes = OmegaConf.select(cfg, "num_cubes", default=None)
+    if num_cubes is not None:
+        kwargs["num_cubes"] = num_cubes
+    return kwargs
+
+
+def make_env(cfg):
     """Create a vectorized ManiSkill env with optional video recording."""
     need_render = cfg.record_video or cfg.render_mode == "human"
     render_mode = cfg.render_mode if need_render else None
+
+    kwargs = _env_kwargs(cfg)
 
     env = gym.make(
         cfg.env_id,
@@ -20,7 +31,7 @@ def make_env(cfg: EnvConfig):
         num_envs=cfg.num_envs,
         max_episode_steps=cfg.max_episode_steps,
         render_mode=render_mode,
-        **cfg.extra_kwargs,
+        **kwargs,
     )
 
     if cfg.record_video and cfg.render_mode != "human":
@@ -36,7 +47,7 @@ def make_env(cfg: EnvConfig):
     return env
 
 
-def make_single_env(cfg: EnvConfig):
+def make_single_env(cfg):
     """Create a single raw gym env for use with the motion planner.
 
     Forces ``num_envs=1`` and ignores the vectorized wrapper so that
@@ -45,6 +56,8 @@ def make_single_env(cfg: EnvConfig):
     """
     need_render = cfg.record_video or cfg.render_mode == "human"
     render_mode = cfg.render_mode if need_render else None
+
+    kwargs = _env_kwargs(cfg)
 
     env = gym.make(
         cfg.env_id,
@@ -55,7 +68,7 @@ def make_single_env(cfg: EnvConfig):
         max_episode_steps=cfg.max_episode_steps,
         render_mode=render_mode,
         sim_backend="cpu",
-        **cfg.extra_kwargs,
+        **kwargs,
     )
 
     if cfg.record_video and cfg.render_mode != "human":

@@ -3,8 +3,8 @@ import random
 import hydra
 import numpy as np
 import torch
+from omegaconf import DictConfig, OmegaConf
 
-from taskbench.config import Config
 from taskbench.envs.factory import make_env, make_single_env
 from taskbench.logger import Logger
 
@@ -91,7 +91,8 @@ def run_solver(config, logger: Logger):
     """Run episodes with a registered solver (motion planner)."""
     from taskbench.solver import get_solver
 
-    solver = get_solver(config.run.solver)
+    solver_kwargs = OmegaConf.select(config.run, "solver_kwargs", default={}) or {}
+    solver = get_solver(config.run.solver, **solver_kwargs)
 
     env = make_single_env(config.env)
     target_episodes = config.run.num_episodes
@@ -138,7 +139,7 @@ def run_solver(config, logger: Logger):
 
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="default")
-def main(cfg: Config) -> None:
+def main(cfg: DictConfig) -> None:
     seed_everything(cfg.seed)
     logger = Logger(cfg)
 

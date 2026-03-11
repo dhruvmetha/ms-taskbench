@@ -28,11 +28,7 @@ uv run python -m taskbench.run
 # Cube stacking solver (env requirements set by configs/solver/stack_cubes.yaml)
 uv run python -m taskbench.run solver=stack_cubes
 
-# N-cube stacking with extra env kwargs (+ prefix required for new keys)
-uv run python -m taskbench.run solver=stack_cubes env.env_id=StackNCube-v1 +env.extra_kwargs.num_cubes=3
-
 # Common overrides
-uv run python -m taskbench.run solver=stack_cubes env.env_id=StackCubeDistractor-v1
 uv run python -m taskbench.run env.record_video=true run.num_episodes=10
 uv run python -m taskbench.run seed=123 logging.use_wandb=true
 ```
@@ -79,7 +75,7 @@ Robot-specific constants live in `RobotConfig` (`taskbench/skills/robot_config.p
 
 ### Key Modules
 
-- **`taskbench/config.py`** — Hydra-compatible dataclasses (`Config`, `EnvConfig`, `LoggingConfig`, `RunConfig`).
+- **`configs/default.yaml`** — Hydra config (YAML-only, no Python dataclasses). Solver configs in `configs/solver/`.
 - **`taskbench/envs/factory.py`** — `make_env()` (vectorized) and `make_single_env()` (raw, for motion planner).
 - **`taskbench/envs/base.py`** — `TaskEnv` base class with abstract `get_objects()`.
 - **`taskbench/solver.py`** — `BaseSolver` ABC, `SolverResult`, `@register_solver`, `discover_solvers()`.

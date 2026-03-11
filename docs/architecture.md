@@ -6,7 +6,6 @@ Taskbench is a robotics research testbed for evaluating solvers on ManiSkill3 ma
 
 ```
 taskbench/                          # Core framework
-  config.py                         # Hydra dataclass configs
   run.py                            # Entry point (@hydra.main)
   solver.py                         # BaseSolver ABC, SolverResult, @register_solver, auto-discovery
   recorder.py                       # StateRecorder for episode capture (HDF5)
@@ -27,14 +26,16 @@ taskbench/                          # Core framework
 
   solvers/
     stack_n_cubes.py                # StackCubesSolver (@register_solver)
+    replay.py                       # ReplaySolver (@register_solver)
     demo_recorder.py                # DemoRecorderSolver (@register_solver)
     shelf_reachability.py           # ShelfReachabilitySolver (@register_solver)
 
 configs/
-  default.yaml                      # Default Hydra config
+  default.yaml                      # Default Hydra config (YAML-only, no Python dataclasses)
   solver/                           # Hydra config group (one YAML per solver)
     random.yaml
     stack_cubes.yaml
+    replay.yaml
     demo_recorder.yaml
     shelf_reachability.yaml
 ```
@@ -49,7 +50,7 @@ configs/
 ```bash
 uv run python -m taskbench.run                                      # random baseline
 uv run python -m taskbench.run solver=stack_cubes                   # registered solver
-uv run python -m taskbench.run solver=stack_cubes env.env_id=StackNCube-v1 +env.extra_kwargs.num_cubes=4
+uv run python -m taskbench.run solver=stack_cubes env.num_cubes=4
 ```
 
 ---
@@ -185,7 +186,7 @@ class TaskEnv(BaseEnv, metaclass=ABCMeta):
 | Env ID | Class | get_objects() | Notes |
 |--------|-------|---------------|-------|
 | `StackCube-v1` | Built-in ManiSkill | `{"cube_0": cubeB, "cube_1": cubeA}` | 2-cube stacking (fallback in `get_objects()` dispatch) |
-| `StackNCube-v1` | `StackNCubeEnv` | `{"cube_0": ..., "cube_N": ...}` | Parameterized N-cube (2-6), cube_0 is always green (base), any tower order valid. `+env.extra_kwargs.num_cubes=N` |
+| `StackNCube-v1` | `StackNCubeEnv` | `{"cube_0": ..., "cube_N": ...}` | Parameterized N-cube (2-6), cube_0 is always green (base), any tower order valid. `env.num_cubes=N` |
 | `StackCubeDistractor-v1` | `StackCubeDistractorEnv` | `{"cube_0": green, "cube_1": red, "cube_2": blue}` | 2-cube stacking + blue distractor |
 | `ShelfEnv-v1` | `ShelfEnv` | `{"cyl_0": ..., "cyl_19": ...}` | Enclosed shelf, 19 blue + 1 red cylinder |
 | `BinWithObjects-v1` | `BinWithObjectsEnv` | `{obj.name: obj, ...}` | Bin with ~30 random primitives + YCB objects |
@@ -389,20 +390,13 @@ episode.hdf5
 
 ## Configuration
 
-All config is managed via Hydra dataclasses in `taskbench/config.py`:
-
-| Config | Key Fields |
-|--------|------------|
-| `EnvConfig` | `env_id`, `control_mode`, `num_envs`, `max_episode_steps`, `extra_kwargs`, `record_video`, `render_mode` |
-| `RunConfig` | `solver`, `num_episodes` |
-| `LoggingConfig` | `use_wandb`, `project`, `group` |
-| `Config` | `seed`, `env`, `run`, `logging` |
+All config is YAML-only (no Python dataclasses). `configs/default.yaml` defines the schema; solver configs in `configs/solver/` override env-specific fields.
 
 Override any field from the command line:
 
 ```bash
 uv run python -m taskbench.run seed=123 env.record_video=true run.num_episodes=10
-uv run python -m taskbench.run solver=stack_cubes +env.extra_kwargs.num_cubes=5
+uv run python -m taskbench.run solver=stack_cubes env.num_cubes=5
 ```
 
 ---
