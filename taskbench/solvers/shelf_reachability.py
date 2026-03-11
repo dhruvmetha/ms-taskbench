@@ -79,7 +79,7 @@ class ShelfReachabilitySolver(BaseSolver):
                         env, planner, pose, rc.gripper_open, rc,
                         dry_run=True,
                     )
-                    ok = result != -1
+                    ok = result is not None
                     results[ix, iy, iz] = ok
                     if ok:
                         reachable += 1
@@ -130,7 +130,7 @@ class ShelfReachabilitySolver(BaseSolver):
             step_result = move_to_pose(
                 env, planner, pose, rc.gripper_open, rc,
             )
-            if step_result != -1:
+            if step_result is not None:
                 try:
                     img = env.render()
                     img_np = img[0].cpu().numpy()

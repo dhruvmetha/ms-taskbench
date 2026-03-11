@@ -237,7 +237,7 @@ def follow_path(env, result, gripper_state, robot_config: RobotConfig,
                         "Collision at step %d/%d: %s -> %s (%.2f N), aborting",
                         i, n_step, finger, other, force,
                     )
-                    return -1
+                    return None
     return obs, reward, terminated, truncated, info
 
 
@@ -276,13 +276,11 @@ def detach_object(planner):
 
 def move_to_pose(env, planner, pose, gripper_state, robot_config: RobotConfig,
                  dry_run=False, monitor_contacts=False, step_callback=None):
-    """Plan and execute a motion to target pose.
+    """Plan and execute a straight-line motion to target pose.
 
-    Tries ``plan_screw()`` first (greedy Cartesian interpolation).
-    On failure, falls back to ``plan_pose()`` (OMPL RRTConnect with
-    obstacle avoidance).
+    Uses ``plan_screw()`` (Cartesian straight-line interpolation).
 
-    Returns -1 on planning failure, the plan dict if dry_run=True,
+    Returns None on planning failure, the plan dict if dry_run=True,
     or the last (obs, reward, terminated, truncated, info) tuple.
     """
     goal = sapien_to_mplib_pose(pose)
@@ -293,16 +291,8 @@ def move_to_pose(env, planner, pose, gripper_state, robot_config: RobotConfig,
         time_step=env.unwrapped.control_timestep,
     )
     if result["status"] != "Success":
-        logger.debug("plan_screw failed (%s), falling back to plan_pose (RRTConnect)", result["status"])
-        result = planner.plan_pose(
-            goal,
-            current_qpos,
-            time_step=env.unwrapped.control_timestep,
-        )
-        if result["status"] != "Success":
-            logger.warning("Both plan_screw and plan_pose failed: %s", result["status"])
-            return -1
-        logger.debug("plan_pose succeeded")
+        logger.warning("plan_screw failed: %s", result["status"])
+        return None
     if dry_run:
         return result
     return follow_path(env, result, gripper_state, robot_config,

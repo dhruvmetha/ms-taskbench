@@ -299,5 +299,5 @@ class DemoRecorderSolver(BaseSolver):
                 break
 
         info = raw.evaluate()
-        success = bool(info["success"])
+        success = bool(info["success"].item())
         return SolverResult(success=success, info=dict(info))

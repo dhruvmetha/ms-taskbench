@@ -21,8 +21,8 @@ from mani_skill.utils.structs.pose import Pose
 from mani_skill.utils.structs.types import SceneConfig, SimConfig
 
 CUBE_COLORS = [
+    [0, 1, 0, 1],  # green (cube_0 is always the base)
     [1, 0, 0, 1],  # red
-    [0, 1, 0, 1],  # green
     [0, 0, 1, 1],  # blue
     [1, 1, 0, 1],  # yellow
     [1, 0, 1, 1],  # magenta
@@ -128,35 +128,37 @@ class StackNCubeEnv(TaskEnv):
                     cube.set_pose(Pose.create_from_pq(p=xyz, q=qs))
 
     def evaluate(self):
-        pos = [cube.pose.p for cube in self.cubes]
+        # Sort cubes by Z height — any ordering is valid as long as
+        # cube_0 is the base and all cubes form a single vertical tower.
+        all_pos = torch.stack([cube.pose.p for cube in self.cubes], dim=1)  # (B, N, 3)
+        zs = all_pos[:, :, 2]
+        order = torch.argsort(zs, dim=1)
+        sorted_pos = torch.gather(all_pos, 1, order.unsqueeze(-1).expand(-1, -1, 3))
+
+        half_size = self.cube_half_size
+        xy_thresh = torch.linalg.norm(half_size[:2]) + 0.005
+        z_target = half_size[2] * 2  # full cube height
 
         all_pairs_stacked = torch.ones(
             self.num_envs, device=self.device, dtype=torch.bool
         )
         all_static = torch.ones(self.num_envs, device=self.device, dtype=torch.bool)
         any_grasped = torch.zeros(self.num_envs, device=self.device, dtype=torch.bool)
+        base_is_cube_0 = order[:, 0] == 0
 
-        half_size = self.cube_half_size
-        xy_thresh = torch.linalg.norm(half_size[:2]) + 0.005
-        z_target = half_size[2] * 2  # full cube height
+        for k in range(self.num_cubes):
+            all_static &= self.cubes[k].is_static(lin_thresh=1e-2, ang_thresh=0.5)
+            any_grasped |= self.agent.is_grasping(self.cubes[k])
 
-        for i in range(1, self.num_cubes):
-            offset = pos[i] - pos[i - 1]
-
-            xy_ok = torch.linalg.norm(offset[..., :2], axis=1) <= xy_thresh
+        for k in range(1, self.num_cubes):
+            offset = sorted_pos[:, k] - sorted_pos[:, k - 1]
+            xy_ok = torch.linalg.norm(offset[..., :2], dim=1) <= xy_thresh
             z_ok = torch.abs(offset[..., 2] - z_target) <= 0.005
-            pair_stacked = xy_ok & z_ok
+            all_pairs_stacked &= xy_ok & z_ok
 
-            all_pairs_stacked &= pair_stacked
-            all_static &= self.cubes[i].is_static(lin_thresh=1e-2, ang_thresh=0.5)
-            any_grasped |= self.agent.is_grasping(self.cubes[i])
-
-        # Also check bottom cube
-        all_static &= self.cubes[0].is_static(lin_thresh=1e-2, ang_thresh=0.5)
-        any_grasped |= self.agent.is_grasping(self.cubes[0])
-
-        success = all_pairs_stacked & all_static & (~any_grasped)
+        success = base_is_cube_0 & all_pairs_stacked & all_static & (~any_grasped)
         return {
+            "base_is_cube_0": base_is_cube_0,
             "all_pairs_stacked": all_pairs_stacked,
             "all_static": all_static,
             "any_grasped": any_grasped,

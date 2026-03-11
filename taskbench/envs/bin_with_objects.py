@@ -150,30 +150,30 @@ class BinWithObjectsEnv(TaskEnv):
 
     def _build_primitive(self, idx: int):
         """Build a random colorful primitive with random size (small/medium/large)."""
-        shape = np.random.choice(["cube", "sphere", "cylinder", "box"])
-        size_cat = np.random.choice(["small", "medium", "large"])
+        shape = self.np_random.choice(["cube", "sphere", "cylinder", "box"])
+        size_cat = self.np_random.choice(["small", "medium", "large"])
         lo, hi = SIZE_PRESETS[size_cat]
         color = OBJECT_COLORS[idx % len(OBJECT_COLORS)]
         mat = sapien.render.RenderMaterial(base_color=color)
         builder = self.scene.create_actor_builder()
 
         if shape == "cube":
-            hs = np.random.uniform(lo, hi)
+            hs = self.np_random.uniform(lo, hi)
             builder.add_box_collision(half_size=[hs, hs, hs])
             builder.add_box_visual(half_size=[hs, hs, hs], material=mat)
         elif shape == "sphere":
-            r = np.random.uniform(lo, hi)
+            r = self.np_random.uniform(lo, hi)
             builder.add_sphere_collision(radius=r)
             builder.add_sphere_visual(radius=r, material=mat)
         elif shape == "cylinder":
-            r = np.random.uniform(lo * 0.7, hi * 0.7)
-            hl = np.random.uniform(lo, hi)
+            r = self.np_random.uniform(lo * 0.7, hi * 0.7)
+            hl = self.np_random.uniform(lo, hi)
             builder.add_cylinder_collision(radius=r, half_length=hl)
             builder.add_cylinder_visual(radius=r, half_length=hl, material=mat)
         else:  # box
-            hx = np.random.uniform(lo, hi)
-            hy = np.random.uniform(lo * 0.6, hi)
-            hz = np.random.uniform(lo * 0.6, hi)
+            hx = self.np_random.uniform(lo, hi)
+            hy = self.np_random.uniform(lo * 0.6, hi)
+            hz = self.np_random.uniform(lo * 0.6, hi)
             builder.add_box_collision(half_size=[hx, hy, hz])
             builder.add_box_visual(half_size=[hx, hy, hz], material=mat)
 
@@ -182,7 +182,7 @@ class BinWithObjectsEnv(TaskEnv):
 
     def _build_ycb(self, idx: int):
         """Build a random YCB mesh object."""
-        model_id = np.random.choice(YCB_MODEL_IDS)
+        model_id = self.np_random.choice(YCB_MODEL_IDS)
         builder = actors.get_actor_builder(self.scene, id=f"ycb:{model_id}")
         builder.initial_pose = sapien.Pose(p=[0, 0, 0.5 + idx * 0.1])
         return builder.build(name=f"ycb_{idx}")
@@ -201,7 +201,7 @@ class BinWithObjectsEnv(TaskEnv):
         # Mix of primitives and YCB — roughly 50/50
         self.objects = []
         for i in range(self.num_objects):
-            if np.random.random() < 0.5:
+            if self.np_random.random() < 0.5:
                 self.objects.append(self._build_primitive(i))
             else:
                 self.objects.append(self._build_ycb(i))
@@ -236,8 +236,8 @@ class BinWithObjectsEnv(TaskEnv):
 
             for obj in self.objects:
                 for attempt in range(3):
-                    x = cx + np.random.uniform(-self.BIN_BX * spawn_r, self.BIN_BX * spawn_r)
-                    y = cy + np.random.uniform(-self.BIN_BY * spawn_r, self.BIN_BY * spawn_r)
+                    x = cx + self.np_random.uniform(-self.BIN_BX * spawn_r, self.BIN_BX * spawn_r)
+                    y = cy + self.np_random.uniform(-self.BIN_BY * spawn_r, self.BIN_BY * spawn_r)
                     obj.set_pose(sapien.Pose(p=[x, y, drop_z]))
                     escaped = False
                     for step in range(100):

@@ -126,7 +126,7 @@ class Move(Skill):
         res = move_to_pose(self.env, self.planner, target_pose, gripper_state,
                            rc, monitor_contacts=monitor_contacts,
                            step_callback=self.step_callback)
-        if res == -1:
+        if res is None:
             return MoveResult(success=False, failure_reason="move_plan_failed")
         return MoveResult(success=True, step_result=res)
 
@@ -172,9 +172,7 @@ class Pick(Skill):
         grasp_pose = raw.agent.build_grasp_pose(approaching, closing, center)
 
         # Search 6 rotation candidates for collision-free orientation
-        angles = np.arange(0, np.pi * 2 / 3, np.pi / 2)
-        angles = np.repeat(angles, 2)
-        angles[1::2] *= -1
+        angles = np.array([0, np.pi/6, -np.pi/6, np.pi/3, -np.pi/3, np.pi/2])
 
         grasp_found = False
         for angle in angles:
@@ -182,7 +180,7 @@ class Pick(Skill):
             candidate = grasp_pose * delta_pose
             res = move_to_pose(env, planner, candidate, rc.gripper_open, rc,
                                dry_run=True)
-            if res == -1:
+            if res is None:
                 continue
             grasp_pose = candidate
             grasp_found = True

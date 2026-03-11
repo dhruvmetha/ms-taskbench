@@ -21,7 +21,7 @@ class EnvConfig:
 class LoggingConfig:
     use_wandb: bool = False
     project: str = "taskbench"
-    group: str = "stackcube"
+    group: str = "default"
 
 
 @dataclass

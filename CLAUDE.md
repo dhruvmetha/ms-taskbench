@@ -85,9 +85,9 @@ Robot-specific constants live in `RobotConfig` (`taskbench/skills/robot_config.p
 - **`taskbench/solver.py`** — `BaseSolver` ABC, `SolverResult`, `@register_solver`, `discover_solvers()`.
 - **`taskbench/skills/robot_config.py`** — `RobotConfig` dataclass + `ROBOT_CONFIGS` registry.
 - **`taskbench/skills/context.py`** — `SkillContext` — bundles env + planner + objects + skills.
-- **`taskbench/skills/motion.py`** — Low-level mplib helpers: `setup_planner()`, `move_to_pose()`, `build_action()`, `PoseLike`.
+- **`taskbench/skills/motion.py`** — Low-level mplib helpers: `setup_planner()`, `move_to_pose()` (straight-line screw interpolation, no RRT), `build_action()`, `PoseLike`.
 - **`taskbench/skills/primitives.py`** — Composable skill objects with `SkillResult` dataclasses.
-- **`taskbench/recorder.py`** — `StateRecorder` for capturing simulation state at control frequency.
+- **`taskbench/recorder.py`** — `StateRecorder` for capturing simulation state to HDF5.
 - **`taskbench/logger.py`** — Optional WandB logging wrapper.
 
 ### Critical Constraints (mplib / ManiSkill)

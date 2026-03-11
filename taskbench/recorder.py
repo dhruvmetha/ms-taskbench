@@ -1,6 +1,24 @@
-"""State recorder for capturing simulation state at control frequency (20 Hz).
+"""State recorder for capturing simulation state at control frequency.
 
-Usage with any solver::
+Saves demonstrations in HDF5 format with structured groups::
+
+    episode.hdf5
+    ├── metadata/          (attrs: control_freq, num_frames)
+    ├── robot/
+    │   ├── qpos           (num_frames, 9)
+    │   ├── tcp_pos        (num_frames, 3)
+    │   ├── tcp_quat       (num_frames, 4)
+    │   └── gripper_qpos   (num_frames, 2)
+    ├── objects/
+    │   ├── cube_0/
+    │   │   ├── pos        (num_frames, 3)
+    │   │   └── quat       (num_frames, 4)
+    │   └── cube_1/
+    │       ├── pos        (num_frames, 3)
+    │       └── quat       (num_frames, 4)
+    └── skill              (num_frames,)  string labels
+
+Usage::
 
     from taskbench.recorder import StateRecorder
 
@@ -12,10 +30,9 @@ Usage with any solver::
     recorder.record()  # initial state
 
     # Pass recorder.record as step_callback to any skill
-    pick(env, planner, obj, step_callback=recorder.record)
-    place(env, planner, pose, step_callback=recorder.record)
+    ctx = SkillContext(env, step_callback=recorder.record)
 
-    recorder.save("data/episode.npz")
+    recorder.save("data/episode.hdf5")
 
 Available robot_fields:
     - ``qpos``         — all joint positions (arm + fingers)
@@ -29,6 +46,7 @@ import logging
 import os
 from typing import Dict, List, Optional
 
+import h5py
 import numpy as np
 
 logger = logging.getLogger("taskbench.recorder")
@@ -101,29 +119,52 @@ class StateRecorder:
         self.frames.append(frame)
 
     def save(self, path):
-        """Save all recorded frames to a compressed .npz file.
+        """Save all recorded frames to an HDF5 file.
 
-        Each key becomes an array of shape ``(num_frames, ...)``.
-        Also stores ``num_frames`` and ``control_freq`` as scalars.
+        Structure::
+
+            /metadata          attrs: num_frames, control_freq
+            /robot/<field>     (num_frames, ...) per robot field
+            /objects/<name>/pos   (num_frames, 3)
+            /objects/<name>/quat  (num_frames, 4)
+            /skill             (num_frames,) string labels
         """
         if not self.frames:
             logger.warning("No frames recorded, skipping save")
             return
 
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        num_frames = len(self.frames)
 
-        arrays = {}
-        for key in self.frames[0]:
-            if key == "skill":
-                arrays[key] = np.array([f[key] for f in self.frames])
-            else:
-                arrays[key] = np.stack([f[key] for f in self.frames])
+        with h5py.File(path, "w") as f:
+            # Metadata
+            meta = f.create_group("metadata")
+            meta.attrs["num_frames"] = num_frames
+            meta.attrs["control_freq"] = self.raw.control_freq
 
-        arrays["num_frames"] = np.array(len(self.frames))
-        arrays["control_freq"] = np.array(self.raw.control_freq)
+            # Robot state
+            if self.robot_fields:
+                robot_grp = f.create_group("robot")
+                for field in self.robot_fields:
+                    data = np.stack([frame[field] for frame in self.frames])
+                    robot_grp.create_dataset(field, data=data, compression="gzip")
 
-        np.savez_compressed(path, **arrays)
-        logger.info("Saved %d frames to %s", len(self.frames), path)
+            # Object poses
+            if self.objects:
+                obj_grp = f.create_group("objects")
+                for name in self.objects:
+                    name_grp = obj_grp.create_group(name)
+                    pos = np.stack([frame[f"{name}_pos"] for frame in self.frames])
+                    quat = np.stack([frame[f"{name}_quat"] for frame in self.frames])
+                    name_grp.create_dataset("pos", data=pos, compression="gzip")
+                    name_grp.create_dataset("quat", data=quat, compression="gzip")
+
+            # Skill labels
+            skills = [frame["skill"] for frame in self.frames]
+            dt = h5py.string_dtype()
+            f.create_dataset("skill", data=skills, dtype=dt)
+
+        logger.info("Saved %d frames to %s", num_frames, path)
 
     def clear(self):
         """Discard all recorded frames."""

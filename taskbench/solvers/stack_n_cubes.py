@@ -34,10 +34,11 @@ class StackCubesSolver(BaseSolver):
 
         raw = env.unwrapped
         objects = ctx.objects
-        names = list(objects.keys())
+        base_name = "cube_0"
+        other_names = [n for n in objects.keys() if n != base_name]
         rng = np.random.default_rng(seed)
-        rng.shuffle(names)
-        n = len(names)
+        rng.shuffle(other_names)
+        n = len(objects)
         total_steps = n - 1
 
         # Set up state recorder and rebind skills with callback
@@ -51,10 +52,10 @@ class StackCubesSolver(BaseSolver):
         recorder.record()  # initial state
 
         logger.info(f"Starting sequential stacking: {n} cubes, {total_steps} pick-place steps (seed={seed})")
+        logger.info(f"Base: {base_name}, pick order: {other_names}")
 
-        for i in range(total_steps):
-            pick_name = names[i + 1]
-            target_name = names[i]
+        target_name = base_name
+        for i, pick_name in enumerate(other_names):
             pick_actor = objects[pick_name]
             target_actor = objects[target_name]
 
@@ -117,6 +118,7 @@ class StackCubesSolver(BaseSolver):
                 )
 
             logger.info(f"Step {i+1}/{total_steps} complete")
+            target_name = pick_name  # next placement goes on top of this cube
 
         # Settle: step until success or timeout
         recorder.set_skill("settle")
@@ -135,7 +137,6 @@ class StackCubesSolver(BaseSolver):
 
         info = raw.evaluate()
         success = bool(info["success"].item())
-        elapsed = int(info["elapsed_steps"])
 
         if not success:
             logger.warning("Stacking complete but env reports failure")
@@ -143,10 +144,9 @@ class StackCubesSolver(BaseSolver):
         logger.info(f"Stacking complete: {total_steps}/{total_steps} cubes stacked")
         return SolverResult(
             success=success,
-            elapsed_steps=elapsed,
             info={"cubes_stacked": total_steps},
         )
 
     def _save_recording(self, recorder, seed):
         """Save state recording to the data/ directory."""
-        recorder.save(f"data/episode_seed{seed}.npz")
+        recorder.save(f"data/episode_seed{seed}.hdf5")

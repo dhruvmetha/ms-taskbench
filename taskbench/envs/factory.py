@@ -8,7 +8,7 @@ from taskbench.config import EnvConfig
 
 
 def make_env(cfg: EnvConfig):
-    """Create a ManiSkill StackCube env with optional video recording and vectorization."""
+    """Create a vectorized ManiSkill env with optional video recording."""
     need_render = cfg.record_video or cfg.render_mode == "human"
     render_mode = cfg.render_mode if need_render else None
 

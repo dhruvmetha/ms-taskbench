@@ -197,7 +197,7 @@ class ShelfEnv(TaskEnv):
         self.shelf_objects = []
         self.target_object = None
         if self.num_objects > 0:
-            self.target_idx = np.random.randint(0, self.num_objects)
+            self.target_idx = self.np_random.integers(0, self.num_objects)
             for i in range(self.num_objects):
                 color = RED_COLOR if i == self.target_idx else BLUE_COLOR
                 cyl_mat = sapien.render.RenderMaterial(base_color=color)
@@ -223,8 +223,8 @@ class ShelfEnv(TaskEnv):
             z = SHELF_SURFACE_Z + CYL_HALF_LENGTH
 
             for i, obj in enumerate(self.shelf_objects):
-                x = np.random.uniform(x_lo, x_hi)
-                y = np.random.uniform(y_lo, y_hi)
+                x = self.np_random.uniform(x_lo, x_hi)
+                y = self.np_random.uniform(y_lo, y_hi)
                 obj.set_pose(sapien.Pose(p=[x, y, z], q=CYL_UPRIGHT_Q))
 
     # ------------------------------------------------------------------

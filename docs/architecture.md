@@ -9,7 +9,7 @@ taskbench/                          # Core framework
   config.py                         # Hydra dataclass configs
   run.py                            # Entry point (@hydra.main)
   solver.py                         # BaseSolver ABC, SolverResult, @register_solver, auto-discovery
-  recorder.py                       # StateRecorder for episode capture
+  recorder.py                       # StateRecorder for episode capture (HDF5)
   logger.py                         # WandB logging wrapper
   envs/
     base.py                         # TaskEnv — base class with get_objects()
@@ -155,7 +155,7 @@ ROBOT_CONFIGS = {
 | Function | Description |
 |----------|-------------|
 | `setup_planner(env, robot_config)` | Create mplib Planner from env's robot, add table collision |
-| `move_to_pose(env, planner, pose, gripper_state, robot_config, ...)` | Plan + execute motion (screw -> RRTConnect fallback) |
+| `move_to_pose(env, planner, pose, gripper_state, robot_config, ...)` | Plan + execute straight-line motion (screw interpolation) |
 | `follow_path(env, result, gripper_state, robot_config, ...)` | Execute a pre-planned trajectory |
 | `actuate_gripper(env, planner, gripper_state, steps=6)` | Open/close gripper for N steps |
 | `build_action(env, qpos, gripper_state, qvel=None)` | Build action array for pd_joint_pos or pd_joint_pos_vel |
@@ -185,7 +185,7 @@ class TaskEnv(BaseEnv, metaclass=ABCMeta):
 | Env ID | Class | get_objects() | Notes |
 |--------|-------|---------------|-------|
 | `StackCube-v1` | Built-in ManiSkill | `{"cube_0": cubeB, "cube_1": cubeA}` | 2-cube stacking (fallback in `get_objects()` dispatch) |
-| `StackNCube-v1` | `StackNCubeEnv` | `{"cube_0": ..., "cube_N": ...}` | Parameterized N-cube (2-6), `+env.extra_kwargs.num_cubes=N` |
+| `StackNCube-v1` | `StackNCubeEnv` | `{"cube_0": ..., "cube_N": ...}` | Parameterized N-cube (2-6), cube_0 is always green (base), any tower order valid. `+env.extra_kwargs.num_cubes=N` |
 | `StackCubeDistractor-v1` | `StackCubeDistractorEnv` | `{"cube_0": green, "cube_1": red, "cube_2": blue}` | 2-cube stacking + blue distractor |
 | `ShelfEnv-v1` | `ShelfEnv` | `{"cyl_0": ..., "cyl_19": ...}` | Enclosed shelf, 19 blue + 1 red cylinder |
 | `BinWithObjects-v1` | `BinWithObjectsEnv` | `{obj.name: obj, ...}` | Bin with ~30 random primitives + YCB objects |
@@ -310,10 +310,7 @@ class MyTaskSolver(BaseSolver):
             return SolverResult(success=False, failure_reason=place_result.failure_reason)
 
         info = env.unwrapped.evaluate()
-        return SolverResult(
-            success=bool(info["success"].item()),
-            elapsed_steps=int(info["elapsed_steps"]),
-        )
+        return SolverResult(success=bool(info["success"].item()))
 ```
 
 ### 3. Create the Hydra Config
@@ -344,7 +341,7 @@ The solver is auto-discovered from `taskbench/solvers/my_task.py` (no registry e
 
 ## State Recording
 
-`StateRecorder` captures simulation state at control frequency for offline analysis:
+`StateRecorder` captures simulation state at control frequency and saves to HDF5:
 
 ```python
 from taskbench.recorder import StateRecorder
@@ -363,12 +360,30 @@ recorder.record()  # initial state
 recorder.set_skill("pick(cube_1)")
 ctx.pick("cube_1")
 
-recorder.save("data/episode.npz")
+recorder.save("data/episode.hdf5")
 ```
 
 Available `robot_fields`: `qpos`, `qvel`, `tcp_pos`, `tcp_quat`, `gripper_qpos`.
 
-The saved `.npz` contains one array per field with shape `(num_frames, ...)`, plus `num_frames` and `control_freq` scalars.
+HDF5 structure:
+
+```
+episode.hdf5
+├── metadata/              attrs: num_frames, control_freq
+├── robot/
+│   ├── qpos               (num_frames, 9)
+│   ├── tcp_pos            (num_frames, 3)
+│   ├── tcp_quat           (num_frames, 4)
+│   └── gripper_qpos       (num_frames, 2)
+├── objects/
+│   ├── cube_0/
+│   │   ├── pos            (num_frames, 3)
+│   │   └── quat           (num_frames, 4)
+│   └── cube_1/
+│       ├── pos            (num_frames, 3)
+│       └── quat           (num_frames, 4)
+└── skill                  (num_frames,) string labels
+```
 
 ---
 

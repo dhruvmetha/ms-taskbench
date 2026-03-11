@@ -16,6 +16,18 @@ from taskbench.skills.motion import setup_planner
 from taskbench.skills.primitives import Move, Pick, Place, Push
 from taskbench.skills.robot_config import RobotConfig, get_robot_config
 
+_NOT_READY_MSG = "SkillContext.reset() must be called before using skills"
+
+
+class _SkillProxy:
+    """Raises a clear error when skills are accessed before reset()."""
+
+    def __call__(self, *args, **kwargs):
+        raise RuntimeError(_NOT_READY_MSG)
+
+    def __getattr__(self, name):
+        raise RuntimeError(_NOT_READY_MSG)
+
 
 class SkillContext:
     """Shared context for skill-based solvers.
@@ -37,11 +49,12 @@ class SkillContext:
         self.planner = None
         self.objects: dict[str, object] = {}
 
-        # Skill instances (populated by _build_skills)
-        self.pick: Pick = None  # type: ignore[assignment]
-        self.place: Place = None  # type: ignore[assignment]
-        self.push: Push = None  # type: ignore[assignment]
-        self.move: Move = None  # type: ignore[assignment]
+        # Skill instances — populated by reset() → _build_skills()
+        _proxy = _SkillProxy()
+        self.pick: Pick = _proxy  # type: ignore[assignment]
+        self.place: Place = _proxy  # type: ignore[assignment]
+        self.push: Push = _proxy  # type: ignore[assignment]
+        self.move: Move = _proxy  # type: ignore[assignment]
 
     def reset(self, seed=None):
         """Reset the env and rebuild planner, objects, and skills."""
