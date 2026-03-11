@@ -2,12 +2,16 @@
 
 Usage:
     uv run python -m taskbench.run solver=replay \\
-        +run.solver_kwargs.demo_path=data/episode_seed43.hdf5
+        run.solver_kwargs.demo_path=data/success/episode_seed45.hdf5 \\
+        env.num_cubes=5
 
     # With video recording:
     uv run python -m taskbench.run solver=replay \\
-        +run.solver_kwargs.demo_path=data/episode_seed43.hdf5 \\
-        env.record_video=true
+        run.solver_kwargs.demo_path=data/success/episode_seed45.hdf5 \\
+        env.num_cubes=5 env.record_video=true
+
+Note: env.num_cubes must match the demo. The solver will raise a clear
+error if objects are missing.
 """
 
 import json
@@ -59,19 +63,50 @@ class ReplaySolver(BaseSolver):
 
     def solve(self, env, seed=None) -> SolverResult:
         with h5py.File(self.demo_path, "r") as f:
-            demo_seed = int(f["metadata"].attrs["seed"])
+            meta = f["metadata"].attrs
+            demo_seed = int(meta["seed"])
+            demo_env_id = meta.get("env_id", "")
+            if isinstance(demo_env_id, bytes):
+                demo_env_id = demo_env_id.decode()
             skill_names = [s.decode() if isinstance(s, bytes) else s
                            for s in f["program/skill"]]
             skill_args = [s.decode() if isinstance(s, bytes) else s
                           for s in f["program/args"]]
 
+        # Validate env matches the demo
+        actual_env_id = env.unwrapped.spec.id if env.unwrapped.spec else ""
+        if demo_env_id and actual_env_id and demo_env_id != actual_env_id:
+            raise ValueError(
+                f"Demo was recorded on {demo_env_id} but env is {actual_env_id}. "
+                f"Override with env.env_id={demo_env_id}"
+            )
+
+        # Count objects in the demo program to detect num_cubes mismatch
+        demo_objects = set()
+        for args_json in skill_args:
+            kwargs = json.loads(args_json)
+            if "obj_name" in kwargs:
+                demo_objects.add(kwargs["obj_name"])
+
         logger.info(
             "Replaying %s: %d skill calls, seed=%d",
             self.demo_path, len(skill_names), demo_seed,
         )
+        if demo_objects:
+            logger.info("Demo uses objects: %s", sorted(demo_objects))
 
         ctx = SkillContext(env)
         ctx.reset(seed=demo_seed)
+
+        # Validate that the env has all objects the demo needs
+        if demo_objects:
+            missing = demo_objects - set(ctx.objects.keys())
+            if missing:
+                raise ValueError(
+                    f"Demo requires objects {sorted(missing)} not found in env. "
+                    f"Env has {sorted(ctx.objects.keys())}. "
+                    f"Try adding env.num_cubes={len(demo_objects) + 1}"
+                )
 
         for i, (skill_name, args_json) in enumerate(zip(skill_names, skill_args)):
             kwargs = _deserialize_kwargs(args_json)
