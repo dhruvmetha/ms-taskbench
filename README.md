@@ -16,6 +16,33 @@ cd ms-taskbench
 uv sync
 ```
 
+## Tasks
+
+### StackNCube
+
+Stack N cubes into a tower. `cube_0` (green) is always the base — the solver picks the remaining cubes in random order and stacks them on top.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `env.num_cubes` | 3 | Number of cubes (2-6) |
+| `env.reward_mode` | sparse | `sparse` or `normalized_dense` |
+
+**Solver:** `stack_cubes` — uses sequential pick-place with screw-based motion planning. Automatically records demos to `data/success/` and `data/failure/` in HDF5 format with full state trajectories and skill program traces.
+
+```bash
+# Stack 3 cubes (default)
+uv run python -m taskbench.run solver=stack_cubes
+
+# Stack 5 cubes, 50 episodes, with video
+uv run python -m taskbench.run solver=stack_cubes env.num_cubes=5 run.num_episodes=50 env.record_video=true
+```
+
+**Replay:** Re-execute a recorded demo's skill program on a fresh env with the same seed:
+
+```bash
+uv run python -m taskbench.run solver=replay run.solver_kwargs.demo_path=data/success/episode_seed45.hdf5
+```
+
 ## Usage
 
 All commands use `uv run` — no manual venv activation needed.
@@ -24,13 +51,7 @@ All commands use `uv run` — no manual venv activation needed.
 # Random baseline (16 parallel envs, 100 episodes)
 uv run python -m taskbench.run
 
-# Stack 3 cubes using motion planner
-uv run python -m taskbench.run solver=stack_cubes
-
-# Stack 5 cubes with video recording
-uv run python -m taskbench.run solver=stack_cubes env.num_cubes=5 env.record_video=true
-
-# Collect 10 demos
+# Collect 10 demos with the stack_cubes solver
 uv run python -m taskbench.run solver=stack_cubes run.num_episodes=10
 
 # Replay a recorded demo
