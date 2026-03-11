@@ -87,9 +87,36 @@ def run_random(config, logger: Logger):
     return all_returns, all_lengths, all_successes
 
 
+def _apply_demo_config(config):
+    """If solver is replay with a demo_path, merge env config from the demo."""
+    solver_kwargs = OmegaConf.select(config.run, "solver_kwargs", default={}) or {}
+    demo_path = solver_kwargs.get("demo_path") if isinstance(solver_kwargs, dict) else OmegaConf.select(solver_kwargs, "demo_path", default=None)
+    if not demo_path:
+        return
+
+    import h5py
+    with h5py.File(demo_path, "r") as f:
+        hydra_yaml = f["metadata"].attrs.get("hydra_config", "")
+        if isinstance(hydra_yaml, bytes):
+            hydra_yaml = hydra_yaml.decode()
+        if not hydra_yaml:
+            return
+        demo_cfg = OmegaConf.create(hydra_yaml)
+
+    # Merge env-specific fields from the demo into the current config
+    for key in ("env_id", "num_cubes"):
+        val = OmegaConf.select(demo_cfg, f"env.{key}", default=None)
+        if val is not None:
+            OmegaConf.update(config, f"env.{key}", val)
+
+
 def run_solver(config, logger: Logger):
     """Run episodes with a registered solver (motion planner)."""
     from taskbench.solver import get_solver
+
+    # For replay solver, auto-configure env from demo metadata
+    if config.run.solver == "replay":
+        _apply_demo_config(config)
 
     solver_kwargs = OmegaConf.select(config.run, "solver_kwargs", default={}) or {}
     solver = get_solver(config.run.solver, **solver_kwargs)
